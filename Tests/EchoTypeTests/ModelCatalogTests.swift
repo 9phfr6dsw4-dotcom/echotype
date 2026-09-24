@@ -98,4 +98,10 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertNil(url.password)
         XCTAssertTrue(url.path.contains(file.revision))
     }
+
+    func testBundledCatalogLoadsForThePackagedApp() throws {
+        let catalog = try ModelCatalog.bundled()
+
+        XCTAssertEqual(catalog.engines.map(\.id), ["apple-speech", "parakeet-v3", "whisper-large-v3-turbo"])
+    }
 }
