@@ -1,0 +1,28 @@
+name: EchoType CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test on macOS 26
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify runner architecture and Xcode SDK
+        run: |
+          test "$(uname -m)" = "arm64"
+          xcodebuild -version
+          sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
+          printf 'macOS SDK: %s\n' "$sdk_version"
+          sdk_major="${sdk_version%%.*}"
+          test "$sdk_major" -ge 26
+      - name: Run tests
+        run: swift test
