@@ -2,7 +2,7 @@ name: EchoType CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feat/**"]
   pull_request:
   workflow_dispatch:
 
@@ -26,5 +26,15 @@ jobs:
           test "$sdk_major" -ge 26
       - name: Run tests
         run: swift test
-      - name: Build native app
-        run: swift build --product EchoTypeApp
+      - name: Build, package, and verify native app
+        run: bash Scripts/package-app.sh
+      - name: Launch smoke test
+        run: bash Scripts/smoke-test.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EchoType-${{ github.run_number }}
+          path: |
+            dist/EchoType.zip
+            dist/EchoType.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
