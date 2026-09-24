@@ -2,6 +2,7 @@ import AVFoundation
 import EchoTypeCore
 import Foundation
 import Observation
+import Speech
 
 @MainActor
 @Observable
@@ -19,6 +20,10 @@ final class SpeechDictationViewModel {
     @ObservationIgnored private var audioEngine: AVAudioEngine?
     @ObservationIgnored private var audioWriter: AudioFileWriter?
     @ObservationIgnored private var recordingURL: URL?
+    @ObservationIgnored private var inputBridge: AudioAnalyzerInputBridge?
+    @ObservationIgnored private var speechAnalyzer: SpeechAnalyzer?
+    @ObservationIgnored private var liveResultsTask: Task<Void, Never>?
+    @ObservationIgnored private var liveTranscript = LiveTranscriptText()
 
     init() {
         Self.removeInterruptedRecordings()
@@ -51,36 +56,85 @@ final class SpeechDictationViewModel {
             errorMessage = "No microphone is available. Connect or enable a microphone, then try again."
             return
         }
+        guard let preparedLocaleIdentifier,
+              let locale = await SpeechTranscriber.supportedLocale(
+                equivalentTo: Locale(identifier: preparedLocaleIdentifier)
+              ) else {
+            errorMessage = "The prepared speech language is no longer available. Prepare Apple Speech again."
+            return
+        }
 
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else {
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
             errorMessage = "The selected microphone is not ready. Check the audio input in System Settings."
+            return
+        }
+
+        let liveTranscriber = SpeechTranscriber(locale: locale, preset: .progressiveLiveTranscription)
+        guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
+            compatibleWith: [liveTranscriber],
+            considering: inputFormat
+        ) else {
+            errorMessage = "Apple Speech could not choose an audio format for this microphone."
             return
         }
 
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("EchoTypeRecording-\(UUID().uuidString)")
             .appendingPathExtension("caf")
-
-        do {
-            let writer = try AudioFileWriter(url: url, settings: format.settings)
-            inputNode.installTap(onBus: 0, bufferSize: 2_048, format: format) { buffer, _ in
-                writer.write(buffer)
+        let (inputSequence, continuation) = AsyncThrowingStream<AnalyzerInput, Error>.makeStream()
+        let analyzer = SpeechAnalyzer(modules: [liveTranscriber])
+        let resultsTask = Task { @MainActor [weak self] in
+            do {
+                for try await result in liveTranscriber.results {
+                    guard let self else { return }
+                    self.liveTranscript.consume(
+                        text: String(result.text.characters),
+                        isFinal: result.isFinal
+                    )
+                    self.transcript = self.liveTranscript.visibleText
+                }
+            } catch {
+                guard let self, !Task.isCancelled else { return }
+                self.errorMessage = error.localizedDescription
             }
+        }
+
+        var tapInstalled = false
+        do {
+            let writer = try AudioFileWriter(url: url, settings: inputFormat.settings)
+            let converter = try SpeechAudioBufferConverter(inputFormat: inputFormat, outputFormat: analyzerFormat)
+            let bridge = AudioAnalyzerInputBridge(converter: converter, continuation: continuation)
+
+            try await analyzer.start(inputSequence: inputSequence)
+            inputNode.installTap(onBus: 0, bufferSize: 2_048, format: inputFormat) { buffer, _ in
+                writer.write(buffer)
+                bridge.append(buffer)
+            }
+            tapInstalled = true
             engine.prepare()
             try engine.start()
 
             audioEngine = engine
             audioWriter = writer
             recordingURL = url
+            inputBridge = bridge
+            speechAnalyzer = analyzer
+            liveResultsTask = resultsTask
             microphoneName = device.localizedName
             transcript = ""
+            liveTranscript.reset()
             isRecording = true
         } catch {
-            inputNode.removeTap(onBus: 0)
+            if tapInstalled {
+                inputNode.removeTap(onBus: 0)
+            }
             engine.stop()
+            continuation.finish(throwing: error)
+            await analyzer.cancelAndFinishNow()
+            resultsTask.cancel()
             try? FileManager.default.removeItem(at: url)
             errorMessage = error.localizedDescription
         }
@@ -102,22 +156,41 @@ final class SpeechDictationViewModel {
         let writeError = audioWriter?.errorMessage
         audioWriter = nil
 
+        let bridge = inputBridge
+        bridge?.finish()
+        inputBridge = nil
+        let analyzer = speechAnalyzer
+        speechAnalyzer = nil
+        if let analyzer {
+            do {
+                try await analyzer.finalizeAndFinishThroughEndOfInput()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+        await liveResultsTask?.value
+        liveResultsTask = nil
+
+        let liveText = liveTranscript.visibleText
         if let writeError {
-            errorMessage = "Could not save the temporary recording: \(writeError)"
+            transcript = liveText
+            errorMessage = "Could not finish the temporary recording: \(writeError)"
             return
         }
-
         guard let preparedLocaleIdentifier else {
+            transcript = liveText
             errorMessage = "Prepare Apple Speech before recording."
             return
         }
 
         do {
-            transcript = try await transcriber.transcribe(
+            let finalTranscript = try await transcriber.transcribe(
                 audioFileAt: recordingURL,
                 localeIdentifier: preparedLocaleIdentifier
             )
+            transcript = finalTranscript.isEmpty ? liveText : finalTranscript
         } catch {
+            transcript = liveText
             errorMessage = error.localizedDescription
         }
     }
@@ -175,5 +248,49 @@ private final class AudioFileWriter: @unchecked Sendable {
         } catch {
             writeFailure = error.localizedDescription
         }
+    }
+}
+
+private final class AudioAnalyzerInputBridge: @unchecked Sendable {
+    private let lock = NSLock()
+    private let converter: SpeechAudioBufferConverter
+    private let continuation: AsyncThrowingStream<AnalyzerInput, Error>.Continuation
+    private var finished = false
+    private var failureMessage: String?
+
+    init(
+        converter: SpeechAudioBufferConverter,
+        continuation: AsyncThrowingStream<AnalyzerInput, Error>.Continuation
+    ) {
+        self.converter = converter
+        self.continuation = continuation
+    }
+
+    func append(_ input: AVAudioPCMBuffer) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finished else { return }
+        do {
+            let converted = try converter.convert(input)
+            continuation.yield(AnalyzerInput(buffer: converted))
+        } catch {
+            finished = true
+            failureMessage = error.localizedDescription
+            continuation.finish(throwing: error)
+        }
+    }
+
+    func finish() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !finished else { return }
+        finished = true
+        continuation.finish()
+    }
+
+    var errorMessage: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return failureMessage
     }
 }

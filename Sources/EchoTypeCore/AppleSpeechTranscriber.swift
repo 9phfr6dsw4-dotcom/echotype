@@ -33,8 +33,11 @@ public struct AppleSpeechTranscriber: Sendable {
             throw TranscriptionError.unsupportedLocale(localeIdentifier)
         }
 
-        let module = SpeechTranscriber(locale: locale, preset: .transcription)
-        if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
+        let modules: [any SpeechModule] = [
+            SpeechTranscriber(locale: locale, preset: .progressiveLiveTranscription),
+            SpeechTranscriber(locale: locale, preset: .transcription)
+        ]
+        if let request = try await AssetInventory.assetInstallationRequest(supporting: modules) {
             try await request.downloadAndInstall()
         }
         return locale.identifier

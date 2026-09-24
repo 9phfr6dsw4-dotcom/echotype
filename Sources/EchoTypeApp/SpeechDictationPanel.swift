@@ -23,7 +23,7 @@ struct SpeechDictationPanel: View {
                     actionButton
                 }
 
-                Text("First use may download Apple’s system-managed speech assets after you choose Prepare. Recording and transcription stay on this Mac; temporary audio is deleted when transcription finishes.")
+                Text("First use may download Apple’s system-managed speech assets after you choose Prepare. Live words are provisional; after you stop, a higher-quality local pass replaces them. Temporary audio is deleted when transcription finishes.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
