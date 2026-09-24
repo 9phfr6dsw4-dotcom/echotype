@@ -30,7 +30,8 @@ Apple exposes contextual strings for vocabulary hints.[9]
 
 ### Parakeet v3
 
-NVIDIA’s official 0.6B Parakeet-TDT-v3 source model is CC-BY-4.0.[11] FluidInference publishes a Core ML conversion, and FluidAudio provides the Swift runtime.[12][14]
+NVIDIA’s official 0.6B Parakeet-TDT-v3 source model is CC-BY-4.0.[11]
+Its card lists Bulgarian, Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Italian, Latvian, Lithuanian, Maltese, Polish, Portuguese, Romanian, Slovak, Slovenian, Spanish, Swedish, Russian, and Ukrainian.[11] FluidInference publishes a Core ML conversion, and FluidAudio provides the Swift runtime.[12][14]
 
 FluidAudio v0.17.2 can load this selected bundle directly from a local folder.[53]
 
