@@ -104,4 +104,14 @@ final class ModelCatalogTests: XCTestCase {
 
         XCTAssertEqual(catalog.engines.map(\.id), ["apple-speech", "parakeet-v3", "whisper-large-v3-turbo"])
     }
+
+    func testModelSelectionDefaultsToAppleAndRequiresAnInstalledDownload() throws {
+        let catalog = try ModelCatalog.bundled()
+        var selection = ModelSelection(catalog: catalog)
+
+        XCTAssertEqual(selection.engineID, "apple-speech")
+        XCTAssertFalse(selection.select(engineID: "parakeet-v3", catalog: catalog, installedDownloadIDs: []))
+        XCTAssertTrue(selection.select(engineID: "parakeet-v3", catalog: catalog, installedDownloadIDs: ["parakeet-v3"]))
+        XCTAssertEqual(selection.engineID, "parakeet-v3")
+    }
 }
