@@ -26,3 +26,5 @@ jobs:
           test "$sdk_major" -ge 26
       - name: Run tests
         run: swift test
+      - name: Build native app
+        run: swift build --product EchoTypeApp
