@@ -1,7 +1,7 @@
 import AVFoundation
 import Foundation
 
-public final class SpeechAudioBufferConverter: @unchecked Sendable {
+public final class SpeechAudioBufferConverter {
     public enum ConversionError: LocalizedError, Equatable {
         case unsupportedFormats
         case emptyInput
@@ -35,6 +35,7 @@ public final class SpeechAudioBufferConverter: @unchecked Sendable {
         self.outputFormat = outputFormat
     }
 
+    /// Converts synchronously; callers must not mutate `input` until this method returns.
     public func convert(_ input: AVAudioPCMBuffer) throws -> AVAudioPCMBuffer {
         lock.lock()
         defer { lock.unlock() }
@@ -56,16 +57,10 @@ public final class SpeechAudioBufferConverter: @unchecked Sendable {
             throw ConversionError.conversionFailed("Could not allocate an output buffer.")
         }
 
+        let inputSource = AudioConverterInputSource(buffer: input)
         var conversionError: NSError?
-        var suppliedInput = false
         let status = converter.convert(to: output, error: &conversionError) { _, inputStatus in
-            guard !suppliedInput else {
-                inputStatus.pointee = .noDataNow
-                return nil
-            }
-            suppliedInput = true
-            inputStatus.pointee = .haveData
-            return input
+            inputSource.nextBuffer(status: inputStatus)
         }
 
         if status == .error {
@@ -75,5 +70,30 @@ public final class SpeechAudioBufferConverter: @unchecked Sendable {
             throw ConversionError.noOutput
         }
         return output
+    }
+}
+
+/// Owns an immutable buffer for the duration of AVAudioConverter's synchronous callback.
+/// The lock serializes the one-shot handoff across the converter's @Sendable input block.
+private final class AudioConverterInputSource: @unchecked Sendable {
+    private let lock = NSLock()
+    private let buffer: AVAudioPCMBuffer
+    private var supplied = false
+
+    init(buffer: AVAudioPCMBuffer) {
+        self.buffer = buffer
+    }
+
+    func nextBuffer(status: UnsafeMutablePointer<AVAudioConverterInputStatus>) -> AVAudioBuffer? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !supplied else {
+            status.pointee = .noDataNow
+            return nil
+        }
+        supplied = true
+        status.pointee = .haveData
+        return buffer
     }
 }

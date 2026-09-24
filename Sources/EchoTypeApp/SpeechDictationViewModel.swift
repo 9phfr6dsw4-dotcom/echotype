@@ -72,7 +72,7 @@ final class SpeechDictationViewModel {
             return
         }
 
-        let liveTranscriber = SpeechTranscriber(locale: locale, preset: .progressiveLiveTranscription)
+        let liveTranscriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
         guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
             compatibleWith: [liveTranscriber],
             considering: inputFormat
@@ -157,8 +157,12 @@ final class SpeechDictationViewModel {
         audioWriter = nil
 
         let bridge = inputBridge
+        let bridgeError = bridge?.errorMessage
         bridge?.finish()
         inputBridge = nil
+        if let bridgeError {
+            errorMessage = "Live preview stopped early; the final local transcription will still run. \(bridgeError)"
+        }
         let analyzer = speechAnalyzer
         speechAnalyzer = nil
         if let analyzer {
@@ -252,6 +256,7 @@ private final class AudioFileWriter: @unchecked Sendable {
 }
 
 private final class AudioAnalyzerInputBridge: @unchecked Sendable {
+    // The audio tap calls append; stop halts the engine before finish. Lock order is bridge → converter → input source, with no reverse acquisition path.
     private let lock = NSLock()
     private let converter: SpeechAudioBufferConverter
     private let continuation: AsyncThrowingStream<AnalyzerInput, Error>.Continuation

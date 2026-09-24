@@ -34,7 +34,7 @@ public struct AppleSpeechTranscriber: Sendable {
         }
 
         let modules: [any SpeechModule] = [
-            SpeechTranscriber(locale: locale, preset: .progressiveLiveTranscription),
+            SpeechTranscriber(locale: locale, preset: .progressiveTranscription),
             SpeechTranscriber(locale: locale, preset: .transcription)
         ]
         if let request = try await AssetInventory.assetInstallationRequest(supporting: modules) {
