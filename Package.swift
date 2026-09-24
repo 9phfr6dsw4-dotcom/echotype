@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "EchoTypeCore", targets: ["EchoTypeCore"])
     ],
     targets: [
-        .target(name: "EchoTypeCore"),
+        .target(name: "EchoTypeCore", resources: [.copy("Resources/model-manifest.json")]),
         .testTarget(name: "EchoTypeTests", dependencies: ["EchoTypeCore"])
     ]
 )

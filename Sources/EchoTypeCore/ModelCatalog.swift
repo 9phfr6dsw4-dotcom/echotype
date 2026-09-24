@@ -92,6 +92,13 @@ public struct ModelCatalog: Sendable {
     public let engines: [ModelEngine]
     public let downloads: [ModelDownload]
 
+    public static func bundled() throws -> ModelCatalog {
+        guard let url = Bundle.module.url(forResource: "model-manifest", withExtension: "json") else {
+            throw ModelCatalogError.invalidManifest("bundled model-manifest.json is missing")
+        }
+        return try ModelCatalog(data: Data(contentsOf: url))
+    }
+
     public init(data: Data) throws {
         let document: ManifestDocument
         do {

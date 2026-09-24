@@ -1,0 +1,627 @@
+{
+  "schemaVersion": 1,
+  "engines": [
+    {
+      "id": "apple-speech",
+      "displayName": "Apple Speech",
+      "downloadId": null,
+      "languageSupport": "macOS locales, queried on this device",
+      "speedNote": "Live system transcription",
+      "accuracyNote": "Voice- and locale-dependent; compare on the same recording",
+      "vocabularySupport": "Contextual strings"
+    },
+    {
+      "id": "parakeet-v3",
+      "displayName": "NVIDIA Parakeet v3",
+      "downloadId": "parakeet-v3",
+      "languageSupport": "25 supported languages; use the pinned list below",
+      "supportedLanguages": [
+        {"code":"bg","name":"Bulgarian"},{"code":"hr","name":"Croatian"},{"code":"cs","name":"Czech"},{"code":"da","name":"Danish"},{"code":"nl","name":"Dutch"},{"code":"en","name":"English"},{"code":"et","name":"Estonian"},{"code":"fi","name":"Finnish"},{"code":"fr","name":"French"},{"code":"de","name":"German"},{"code":"el","name":"Greek"},{"code":"hu","name":"Hungarian"},{"code":"it","name":"Italian"},{"code":"lv","name":"Latvian"},{"code":"lt","name":"Lithuanian"},{"code":"mt","name":"Maltese"},{"code":"pl","name":"Polish"},{"code":"pt","name":"Portuguese"},{"code":"ro","name":"Romanian"},{"code":"sk","name":"Slovak"},{"code":"sl","name":"Slovenian"},{"code":"es","name":"Spanish"},{"code":"sv","name":"Swedish"},{"code":"ru","name":"Russian"},{"code":"uk","name":"Ukrainian"}
+      ],
+      "speedNote": "Streaming Core ML; M5 Air speed is measured locally after use",
+      "accuracyNote": "User-preferred engine; compare on the same recording",
+      "vocabularySupport": "Optional CTC contextual-rescoring bundle"
+    },
+    {
+      "id": "whisper-large-v3-turbo",
+      "displayName": "OpenAI Whisper large-v3-turbo",
+      "downloadId": "whisper-large-v3-turbo",
+      "languageSupport": "Multilingual; 99 languages",
+      "speedNote": "Large Core ML model; first load and throughput are measured locally",
+      "accuracyNote": "Voice- and language-dependent; compare on the same recording",
+      "vocabularySupport": "Decoder prompt tokens"
+    }
+  ],
+  "downloads": [
+    {
+      "id": "parakeet-v3",
+      "engineId": "parakeet-v3",
+      "optional": false,
+      "bytes": 632169729,
+      "license": "CC-BY-4.0",
+      "sources": [
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "gated": false,
+          "declaredLicense": "cc-by-4.0"
+        }
+      ],
+      "files": [
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Decoder.mlmodelc/analytics/coremldata.bin",
+          "destinationPath": "Decoder.mlmodelc/analytics/coremldata.bin",
+          "size": 243,
+          "sha256": "4238c4e81ecd0dc94bd7dfbb60f7e2cc824107c1ffe0387b8607b72833dba350",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Decoder.mlmodelc/coremldata.bin",
+          "destinationPath": "Decoder.mlmodelc/coremldata.bin",
+          "size": 554,
+          "sha256": "18647af085d87bd8f3121c8a9b4d4564c1ede038dab63d295b4e745cf2d7fb99",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Decoder.mlmodelc/metadata.json",
+          "destinationPath": "Decoder.mlmodelc/metadata.json",
+          "size": 3427,
+          "sha256": "a39e93cd8371b8ded92635c7804fcd0590f0d1dd9415c6d19a0484be073077d9",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Decoder.mlmodelc/model.mil",
+          "destinationPath": "Decoder.mlmodelc/model.mil",
+          "size": 13110,
+          "sha256": "ef2a0a281695398a62fde86ac269c68f73d5b578d7ed3b31f2ba91a2d1ea1f35",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Decoder.mlmodelc/weights/weight.bin",
+          "destinationPath": "Decoder.mlmodelc/weights/weight.bin",
+          "size": 23604992,
+          "sha256": "48adf0f0d47c406c8253d4f7fef967436a39da14f5a65e66d5a4b407be355d41",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Encoder_v2.mlmodelc/analytics/coremldata.bin",
+          "destinationPath": "Encoder_v2.mlmodelc/analytics/coremldata.bin",
+          "size": 243,
+          "sha256": "af98d71151609799efbbffc00112fcba4bd91adf0b01135a982c574e91822f9c",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Encoder_v2.mlmodelc/coremldata.bin",
+          "destinationPath": "Encoder_v2.mlmodelc/coremldata.bin",
+          "size": 478,
+          "sha256": "70628bd4fd25fb554cc0cebc31356723930c885480132bf3ecd1b5dbe71dd0a2",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Encoder_v2.mlmodelc/model.mil",
+          "destinationPath": "Encoder_v2.mlmodelc/model.mil",
+          "size": 1002653,
+          "sha256": "abc621390840dd064e6833dc098101706621e47e17119ead904f8c383211dd1d",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Encoder_v2.mlmodelc/weights/weight.bin",
+          "destinationPath": "Encoder_v2.mlmodelc/weights/weight.bin",
+          "size": 594211328,
+          "sha256": "8d2c79e15a4545e08fe3a21fe741e42b8bf24329db81de8fdfacd92388ea5a66",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "JointDecisionv3.mlmodelc/analytics/coremldata.bin",
+          "destinationPath": "JointDecisionv3.mlmodelc/analytics/coremldata.bin",
+          "size": 243,
+          "sha256": "26def4bf73dd56d29dee21c8ef97cb8969e62f6120ed1adc91e46828e2737b6c",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "JointDecisionv3.mlmodelc/coremldata.bin",
+          "destinationPath": "JointDecisionv3.mlmodelc/coremldata.bin",
+          "size": 521,
+          "sha256": "f5fc08b741400f0088492c9e839418b1e18522f19cba28d361dd030c5f398342",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "JointDecisionv3.mlmodelc/metadata.json",
+          "destinationPath": "JointDecisionv3.mlmodelc/metadata.json",
+          "size": 3453,
+          "sha256": "d9307211b9a37e0f0ac260c7660b1571a3de25841035cfdf9b58fd40425f890f",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "JointDecisionv3.mlmodelc/model.mil",
+          "destinationPath": "JointDecisionv3.mlmodelc/model.mil",
+          "size": 11775,
+          "sha256": "be60732943389a047175111a83f8839f3eb39d4803adafa828a0871b2f39818d",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "JointDecisionv3.mlmodelc/weights/weight.bin",
+          "destinationPath": "JointDecisionv3.mlmodelc/weights/weight.bin",
+          "size": 12642764,
+          "sha256": "4e0e63d840032f7f07ddb1d64446051166281e5491bf22da8a945c41f6eedb3e",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Preprocessor.mlmodelc/analytics/coremldata.bin",
+          "destinationPath": "Preprocessor.mlmodelc/analytics/coremldata.bin",
+          "size": 243,
+          "sha256": "c9beeb989c8d66f8be11df59bc6df277ec76cee404f6865b46243835ef562f6d",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Preprocessor.mlmodelc/coremldata.bin",
+          "destinationPath": "Preprocessor.mlmodelc/coremldata.bin",
+          "size": 486,
+          "sha256": "dbde3f2300842c1fd51ef3ff948a0bcffe65ffd2dca10707f2509f32c1d65b1d",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Preprocessor.mlmodelc/metadata.json",
+          "destinationPath": "Preprocessor.mlmodelc/metadata.json",
+          "size": 2841,
+          "sha256": "2a98699e22d279dd37fa1d238aeb1c6db1df0d6fad687775324157689d8f3acf",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Preprocessor.mlmodelc/model.mil",
+          "destinationPath": "Preprocessor.mlmodelc/model.mil",
+          "size": 28181,
+          "sha256": "4b8518a956450fec57f06c2a21bdffc26973f7f1fa6842fb38fe917f896b6b93",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "Preprocessor.mlmodelc/weights/weight.bin",
+          "destinationPath": "Preprocessor.mlmodelc/weights/weight.bin",
+          "size": 491072,
+          "sha256": "129b76e3aeafa8afa3ea76d995b964b145fe83700d579f6ff42c4c38fa0968ea",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-tdt-0.6b-v3-coreml",
+          "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+          "sourcePath": "parakeet_vocab.json",
+          "destinationPath": "parakeet_vocab.json",
+          "size": 151122,
+          "sha256": "7ec60e05f1b24480736ec0eed40900f4626bce1fa9a60fd700ec7e2a59198735",
+          "sha256Source": "computed-from-pinned-file"
+        }
+      ]
+    },
+    {
+      "id": "parakeet-v3-ctc-vocab",
+      "engineId": "parakeet-v3",
+      "optional": true,
+      "bytes": 2373826395,
+      "license": "CC-BY-4.0 original NVIDIA model; conversion repository does not declare a license field",
+      "sources": [
+        {
+          "repo": "FluidInference/parakeet-ctc-0.6b-coreml",
+          "revision": "73c405fce92eb8264ea8f5b1260283eeee05aa27",
+          "gated": false,
+          "declaredLicense": null
+        }
+      ],
+      "originalModel": "nvidia/parakeet-ctc-0.6b",
+      "originalModelLicense": "CC-BY-4.0",
+      "files": [
+        {
+          "repo": "FluidInference/parakeet-ctc-0.6b-coreml",
+          "revision": "73c405fce92eb8264ea8f5b1260283eeee05aa27",
+          "sourcePath": "AudioEncoder.mlmodelc/analytics/coremldata.bin",
+          "destinationPath": "AudioEncoder.mlmodelc/analytics/coremldata.bin",
+          "size": 243,
+          "sha256": "132a16bf732f8b87096f86b8cb0b931e0232a11e41a89b5f2d54fbbcceea3ef5",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-ctc-0.6b-coreml",
+          "revision": "73c405fce92eb8264ea8f5b1260283eeee05aa27",
+          "sourcePath": "AudioEncoder.mlmodelc/coremldata.bin",
+          "destinationPath": "AudioEncoder.mlmodelc/coremldata.bin",
+          "size": 524,
+          "sha256": "fb2baa7c2e50971adf6a4a0d5eedb4088f764082142e798f65e4f1ff278c5a95",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-ctc-0.6b-coreml",
+          "revision": "73c405fce92eb8264ea8f5b1260283eeee05aa27",
+          "sourcePath": "AudioEncoder.mlmodelc/model.mil",
+          "destinationPath": "AudioEncoder.mlmodelc/model.mil",
+          "size": 911675,
+          "sha256": "33b1b09c77435ccc01b62aadd5eb5b1fcf1dcb68d14be49100028ab7ce68032f",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "FluidInference/parakeet-ctc-0.6b-coreml",
+          "revision": "73c405fce92eb8264ea8f5b1260283eeee05aa27",
+          "sourcePath": "AudioEncoder.mlmodelc/weights/weight.bin",
+          "destinationPath": "AudioEncoder.mlmodelc/weights/weight.bin",
+          "size": 2371257856,
+          "sha256": "d30cf59ad460c7fc2fb4bfc952b52f77e4fbbda1a9b913bd0fbcb0634eba09ac",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-ctc-0.6b-coreml",
+          "revision": "73c405fce92eb8264ea8f5b1260283eeee05aa27",
+          "sourcePath": "MelSpectrogram.mlmodelc/analytics/coremldata.bin",
+          "destinationPath": "MelSpectrogram.mlmodelc/analytics/coremldata.bin",
+          "size": 243,
+          "sha256": "13e0dda654255a51db1146af5307bfef099bf4039cbe6f02928b3ff178b0c9f6",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-ctc-0.6b-coreml",
+          "revision": "73c405fce92eb8264ea8f5b1260283eeee05aa27",
+          "sourcePath": "MelSpectrogram.mlmodelc/coremldata.bin",
+          "destinationPath": "MelSpectrogram.mlmodelc/coremldata.bin",
+          "size": 501,
+          "sha256": "3fd5943babe43ce9bdcf58808ee6d2c28feda381aae19c7e038493bce68b6616",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-ctc-0.6b-coreml",
+          "revision": "73c405fce92eb8264ea8f5b1260283eeee05aa27",
+          "sourcePath": "MelSpectrogram.mlmodelc/model.mil",
+          "destinationPath": "MelSpectrogram.mlmodelc/model.mil",
+          "size": 24841,
+          "sha256": "9d24d322991a315e3ec45ad8545f03555d82ed93c56baeb31eecf2dc0c405029",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "FluidInference/parakeet-ctc-0.6b-coreml",
+          "revision": "73c405fce92eb8264ea8f5b1260283eeee05aa27",
+          "sourcePath": "MelSpectrogram.mlmodelc/weights/weight.bin",
+          "destinationPath": "MelSpectrogram.mlmodelc/weights/weight.bin",
+          "size": 1615552,
+          "sha256": "866c3c5d69f1ab1063273ce7e01d26b696e8f41483191409996c853f06b9aa75",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "FluidInference/parakeet-ctc-0.6b-coreml",
+          "revision": "73c405fce92eb8264ea8f5b1260283eeee05aa27",
+          "sourcePath": "vocab.json",
+          "destinationPath": "vocab.json",
+          "size": 14960,
+          "sha256": "80913bfafb2750776f536fb54c4cea3165013608c80c0edbf608415951d5385d",
+          "sha256Source": "computed-from-pinned-file"
+        }
+      ]
+    },
+    {
+      "id": "whisper-large-v3-turbo",
+      "engineId": "whisper-large-v3-turbo",
+      "optional": false,
+      "bytes": 3199676429,
+      "license": "MIT",
+      "sources": [
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "gated": false,
+          "declaredLicense": "mit"
+        },
+        {
+          "repo": "openai/whisper-large-v3-turbo",
+          "revision": "41f01f3fe87f28c78e2fbf8b568835947dd65ed9",
+          "gated": false,
+          "declaredLicense": "mit"
+        }
+      ],
+      "files": [
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/AudioEncoder.mlmodelc/analytics/coremldata.bin",
+          "destinationPath": "AudioEncoder.mlmodelc/analytics/coremldata.bin",
+          "size": 243,
+          "sha256": "b68eb75cef8a4b3585423dca03d42d2f6ff34029421ad11752ea5be85c9bbf4c",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/AudioEncoder.mlmodelc/coremldata.bin",
+          "destinationPath": "AudioEncoder.mlmodelc/coremldata.bin",
+          "size": 348,
+          "sha256": "273d6cd004f95763e9d03e5d36622f11038819a81b9eafed64b1d95444e04f62",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/AudioEncoder.mlmodelc/metadata.json",
+          "destinationPath": "AudioEncoder.mlmodelc/metadata.json",
+          "size": 1877,
+          "sha256": "c3240968ef73f0930faac76d1b83e0645a69ea0ffdc29480622a673ba7d5edd9",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/AudioEncoder.mlmodelc/model.mil",
+          "destinationPath": "AudioEncoder.mlmodelc/model.mil",
+          "size": 7006617,
+          "sha256": "184871550eeaec5466016a55612fdcaec92dfefedafa0f92a7b47de0062316f2",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/AudioEncoder.mlmodelc/model.mlmodel",
+          "destinationPath": "AudioEncoder.mlmodelc/model.mlmodel",
+          "size": 408667,
+          "sha256": "bf0987c0d8c3fe180877b12ba5b4ac1d890e011f2103926e53186089feced575",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/AudioEncoder.mlmodelc/weights/weight.bin",
+          "destinationPath": "AudioEncoder.mlmodelc/weights/weight.bin",
+          "size": 1273974400,
+          "sha256": "6f46870171555792f9e98d5266d2c7d885a18962093b3a9544fffa54dbe8df16",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/MelSpectrogram.mlmodelc/analytics/coremldata.bin",
+          "destinationPath": "MelSpectrogram.mlmodelc/analytics/coremldata.bin",
+          "size": 243,
+          "sha256": "091a361134891f94e613562771beea0d93a9aefbc6984ba86c60f856e07a508f",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/MelSpectrogram.mlmodelc/coremldata.bin",
+          "destinationPath": "MelSpectrogram.mlmodelc/coremldata.bin",
+          "size": 329,
+          "sha256": "f3c5778c86d6fbc6a9817a56dbcac05a946a4d95c77f6db8355572f3be9e9a68",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/MelSpectrogram.mlmodelc/metadata.json",
+          "destinationPath": "MelSpectrogram.mlmodelc/metadata.json",
+          "size": 1850,
+          "sha256": "4ae78f40c33992b394b5d163b13db7e5af3fb35332849409486e8c3cb99faec4",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/MelSpectrogram.mlmodelc/model.mil",
+          "destinationPath": "MelSpectrogram.mlmodelc/model.mil",
+          "size": 10187,
+          "sha256": "17977ed2332430c6cc4c1da2516f2cd4deb662d65ae38d72725ab157f32d4949",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/MelSpectrogram.mlmodelc/weights/weight.bin",
+          "destinationPath": "MelSpectrogram.mlmodelc/weights/weight.bin",
+          "size": 373376,
+          "sha256": "2eb5f443dc3a0a0ee0b5931e2c1a2365e6ab557b58f6ca46af26ea09ec1f7d57",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/TextDecoder.mlmodelc/analytics/coremldata.bin",
+          "destinationPath": "TextDecoder.mlmodelc/analytics/coremldata.bin",
+          "size": 243,
+          "sha256": "09cdcc47a8297a8441b48a3b2859cc75f57c808bc11654f92678188c923533f8",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/TextDecoder.mlmodelc/coremldata.bin",
+          "destinationPath": "TextDecoder.mlmodelc/coremldata.bin",
+          "size": 637,
+          "sha256": "7b49d28fd16bdc6c790a6cca7ff99f83838cec338d84fe44469fa93f16953489",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/TextDecoder.mlmodelc/metadata.json",
+          "destinationPath": "TextDecoder.mlmodelc/metadata.json",
+          "size": 4770,
+          "sha256": "e6a954d6887eccdd513bc3dcd9be1f22e91e7c1545f804c03641b52f8dee67e7",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/TextDecoder.mlmodelc/model.mil",
+          "destinationPath": "TextDecoder.mlmodelc/model.mil",
+          "size": 1010477,
+          "sha256": "418707ff1eab973fe11b0b0cbcb5b4bb7f5c3cee0de0ef11633b412f5e213416",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/TextDecoder.mlmodelc/model.mlmodel",
+          "destinationPath": "TextDecoder.mlmodelc/model.mlmodel",
+          "size": 805204,
+          "sha256": "a99dd7d7d5412c5be4e3dcd8725e7fa0c9f9c2c8d41cb037bf42084f478717b0",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/TextDecoder.mlmodelc/weights/weight.bin",
+          "destinationPath": "TextDecoder.mlmodelc/weights/weight.bin",
+          "size": 1813201716,
+          "sha256": "745c0c3896c41cd6ad01b6c3ed852e0bb1cb2fd1ef579017c5cc9a8aff1d3c66",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/TextDecoderContextPrefill.mlmodelc/analytics/coremldata.bin",
+          "destinationPath": "TextDecoderContextPrefill.mlmodelc/analytics/coremldata.bin",
+          "size": 243,
+          "sha256": "352d00fa1b9b29c06b538013f6b2884029d673a2a246abcd783d5581c4f04c83",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/TextDecoderContextPrefill.mlmodelc/coremldata.bin",
+          "destinationPath": "TextDecoderContextPrefill.mlmodelc/coremldata.bin",
+          "size": 382,
+          "sha256": "a91550bdd77216fd43a9b00251b6b5aebbcb2a2eee5ca92b2b3cdd0b8aa75971",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/TextDecoderContextPrefill.mlmodelc/metadata.json",
+          "destinationPath": "TextDecoderContextPrefill.mlmodelc/metadata.json",
+          "size": 2236,
+          "sha256": "d3e0c9240ee80218a6d5ca3e06aab95ed13b41c2fcca126a18ac269d71208010",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/TextDecoderContextPrefill.mlmodelc/model.mil",
+          "destinationPath": "TextDecoderContextPrefill.mlmodelc/model.mil",
+          "size": 3778,
+          "sha256": "1698212287a0f05df7cb3f5d32f8a9050f0ca6b7b5cbd41f55bb6a9fe54b1d4c",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/TextDecoderContextPrefill.mlmodelc/weights/weight.bin",
+          "destinationPath": "TextDecoderContextPrefill.mlmodelc/weights/weight.bin",
+          "size": 98304192,
+          "sha256": "40b8dc9229eb9627feff2abc3eae6370df0a1536334b11bc26ec307ebc463bfe",
+          "sha256Source": "huggingface-lfs-sha256"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/config.json",
+          "destinationPath": "config.json",
+          "size": 1163,
+          "sha256": "798b69c08cf93b2b03d94bea6eb3eb25fd4712259712d8a62ed2483fdf818a9e",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "argmaxinc/whisperkit-coreml",
+          "revision": "0f63a7800b00dd0226abd051b906c246e1907482",
+          "sourcePath": "openai_whisper-large-v3_turbo/generation_config.json",
+          "destinationPath": "generation_config.json",
+          "size": 2810,
+          "sha256": "d24f9cca0f448609a71ae044b736023706382f45e9700e0dffb2559d10cf1fea",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "openai/whisper-large-v3-turbo",
+          "revision": "41f01f3fe87f28c78e2fbf8b568835947dd65ed9",
+          "sourcePath": "added_tokens.json",
+          "destinationPath": "added_tokens.json",
+          "size": 34648,
+          "sha256": "3c51f66c4c21f9e126970078f11ae77a78c74aee8df606ee9daba86e467108e0",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "openai/whisper-large-v3-turbo",
+          "revision": "41f01f3fe87f28c78e2fbf8b568835947dd65ed9",
+          "sourcePath": "merges.txt",
+          "destinationPath": "merges.txt",
+          "size": 493869,
+          "sha256": "2df2990a395e35e8dfbc7511e08c12d56018d8d04691e0133e5d63b21e154dc6",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "openai/whisper-large-v3-turbo",
+          "revision": "41f01f3fe87f28c78e2fbf8b568835947dd65ed9",
+          "sourcePath": "special_tokens_map.json",
+          "destinationPath": "special_tokens_map.json",
+          "size": 2186,
+          "sha256": "baea4ea09372eb4fca86b4e4346139fd73cb807d5087e9de0948e971739c3e74",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "openai/whisper-large-v3-turbo",
+          "revision": "41f01f3fe87f28c78e2fbf8b568835947dd65ed9",
+          "sourcePath": "tokenizer.json",
+          "destinationPath": "tokenizer.json",
+          "size": 2710337,
+          "sha256": "297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "openai/whisper-large-v3-turbo",
+          "revision": "41f01f3fe87f28c78e2fbf8b568835947dd65ed9",
+          "sourcePath": "tokenizer_config.json",
+          "destinationPath": "tokenizer_config.json",
+          "size": 282843,
+          "sha256": "844b642c73a91359722f47b35705f7174686df33d252695d8572cf9ac03a6389",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "openai/whisper-large-v3-turbo",
+          "revision": "41f01f3fe87f28c78e2fbf8b568835947dd65ed9",
+          "sourcePath": "vocab.json",
+          "destinationPath": "vocab.json",
+          "size": 1036558,
+          "sha256": "e2aa043ef015641d363d8288e7c241c85e36a5c761fb303598e0710233344387",
+          "sha256Source": "computed-from-pinned-file"
+        }
+      ]
+    }
+  ]
+}
