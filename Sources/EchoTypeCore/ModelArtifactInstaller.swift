@@ -176,6 +176,25 @@ public final class ModelArtifactInstaller: @unchecked Sendable {
         return modelsDirectory.appendingPathComponent(download.id, isDirectory: true)
     }
 
+    @discardableResult
+    public func removeInstalled(_ download: ModelDownload) throws -> Bool {
+        try Self.validate(download)
+        try beginInstallation(id: download.id)
+        defer { endInstallation(id: download.id) }
+
+        let installationURL = modelsDirectory.appendingPathComponent(download.id, isDirectory: true).standardizedFileURL
+        guard installationURL.deletingLastPathComponent() == modelsDirectory else {
+            throw ModelArtifactInstallError.unsafeDestination(download.id)
+        }
+        guard FileManager.default.fileExists(atPath: installationURL.path) else { return false }
+        guard isInstalled(download) else {
+            throw ModelArtifactInstallError.installationAlreadyExists(download.id)
+        }
+
+        try FileManager.default.removeItem(at: installationURL)
+        return true
+    }
+
     private func fetch(_ sourceURL: URL, to destinationURL: URL) async throws {
         guard sourceURL.scheme == "https",
               sourceURL.host == "huggingface.co",
