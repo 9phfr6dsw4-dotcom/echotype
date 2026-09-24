@@ -1,4 +1,5 @@
 import Foundation
+import Speech
 import XCTest
 @testable import EchoTypeCore
 
@@ -6,6 +7,9 @@ final class AppleSpeechTranscriberTests: XCTestCase {
     func testTranscribesGeneratedAudioLocally() async throws {
         guard let samplePath = ProcessInfo.processInfo.environment["ECHOTYPE_TEST_AUDIO"] else {
             throw XCTSkip("The macOS CI workflow provides a generated speech sample.")
+        }
+        guard SpeechTranscriber.isAvailable else {
+            throw XCTSkip("This runner's hardware does not support SpeechTranscriber.")
         }
 
         let service = AppleSpeechTranscriber()
