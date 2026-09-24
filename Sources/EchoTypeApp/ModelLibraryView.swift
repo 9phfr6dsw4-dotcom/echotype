@@ -11,6 +11,15 @@ struct ModelLibraryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
+                if library.selectedEngineID == ModelSelection.appleSpeechEngineID {
+                    SpeechDictationPanel()
+                } else {
+                    GroupBox("Dictation") {
+                        Label("Recording is currently connected to Apple Speech. The selected model does not have a recording adapter yet.", systemImage: "info.circle")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 8)
+                    }
+                }
 
                 if let startupError = library.startupError {
                     ContentUnavailableView(
@@ -34,7 +43,7 @@ struct ModelLibraryView: View {
                     ProgressView("Loading model catalog…")
                 }
 
-                Label("Models are stored on this Mac. EchoType contacts the model host only after you choose Download.", systemImage: "lock.shield")
+                Label("External models download only when you ask. Apple speech assets are checked or prepared only when you choose Prepare. Temporary audio is deleted after transcription.", systemImage: "lock.shield")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -88,7 +97,7 @@ struct ModelLibraryView: View {
                         Text(engine.displayName)
                             .font(.title2.weight(.semibold))
                         Label(
-                            selected ? "Current engine" : ready ? "Ready on this Mac" : "Available to download",
+                            selected ? "Current engine" : engine.id == ModelSelection.appleSpeechEngineID ? "Available on this Mac" : ready ? "Ready on this Mac" : "Available to download",
                             systemImage: selected ? "checkmark.circle.fill" : ready ? "checkmark.circle" : "arrow.down.circle"
                         )
                         .font(.subheadline)
@@ -117,6 +126,8 @@ struct ModelLibraryView: View {
 
                 if let download {
                     detailRow("Download", "\(download.bytes.formatted()) bytes · \(download.license ?? "License metadata unavailable")")
+                } else if engine.id == ModelSelection.appleSpeechEngineID {
+                    detailRow("Speech assets", "Managed by macOS; first use may download assets from Apple after you choose Prepare.")
                 } else {
                     detailRow("Download", "No model download required")
                 }
