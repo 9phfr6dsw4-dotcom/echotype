@@ -24,7 +24,11 @@ jobs:
           printf 'macOS SDK: %s\n' "$sdk_version"
           sdk_major="${sdk_version%%.*}"
           test "$sdk_major" -ge 26
+      - name: Create generated speech sample
+        run: say -o "$RUNNER_TEMP/echotype-sample.aiff" "Echo Type stores my speech on this Mac."
       - name: Run tests
+        env:
+          ECHOTYPE_TEST_AUDIO: ${{ runner.temp }}/echotype-sample.aiff
         run: swift test
       - name: Build, package, and verify native app
         run: bash Scripts/package-app.sh

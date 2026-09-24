@@ -1,0 +1,22 @@
+import Foundation
+import XCTest
+@testable import EchoTypeCore
+
+final class AppleSpeechTranscriberTests: XCTestCase {
+    func testTranscribesGeneratedAudioLocally() async throws {
+        guard let samplePath = ProcessInfo.processInfo.environment["ECHOTYPE_TEST_AUDIO"] else {
+            throw XCTSkip("The macOS CI workflow provides a generated speech sample.")
+        }
+
+        let service = AppleSpeechTranscriber()
+        let localeIdentifier = try await service.prepare(localeIdentifier: "en-US")
+        let transcript = try await service.transcribe(
+            audioFileAt: URL(fileURLWithPath: samplePath),
+            localeIdentifier: localeIdentifier
+        )
+        let normalized = String(transcript.lowercased().filter { $0.isLetter || $0.isNumber || $0.isWhitespace })
+
+        XCTAssertTrue(normalized.contains("echo type"), "Unexpected transcription: \(transcript)")
+        XCTAssertTrue(normalized.contains("this mac"), "Unexpected transcription: \(transcript)")
+    }
+}
