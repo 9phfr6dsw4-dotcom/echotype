@@ -20,9 +20,10 @@ cp "Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 resource_bundles=()
 while IFS= read -r bundle_path; do
     resource_bundles+=("$bundle_path")
-done < <(find .build/release -maxdepth 1 -type d -name '*.bundle' -print)
+done < <(find -L .build/release -maxdepth 2 -type d -name '*.bundle' -print)
 if ((${#resource_bundles[@]} == 0)); then
-    printf 'No SwiftPM resource bundles found in .build/release\n' >&2
+    printf 'No SwiftPM resource bundles found under .build/release. Contents:\n' >&2
+    find -L .build/release -maxdepth 2 -print >&2
     exit 1
 fi
 for bundle_path in "${resource_bundles[@]}"; do
