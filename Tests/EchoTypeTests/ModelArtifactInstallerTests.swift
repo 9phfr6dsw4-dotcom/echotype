@@ -112,6 +112,35 @@ final class ModelArtifactInstallerTests: XCTestCase {
         let remaining = try FileManager.default.contentsOfDirectory(atPath: root.path)
         XCTAssertTrue(remaining.isEmpty)
     }
+
+    func testInstalledModelCanBeRemovedAndRemovalIsIdempotent() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fixtureData = fixture
+        let installer = ModelArtifactInstaller(modelsDirectory: root) { _, destination in
+            try fixtureData.write(to: destination)
+        }
+        let download = modelDownload(files: [modelFile("weights.bin")])
+        let installedURL = try await installer.install(download)
+
+        XCTAssertTrue(try installer.removeInstalled(download))
+        XCTAssertFalse(installer.isInstalled(download))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: installedURL.path))
+        XCTAssertFalse(try installer.removeInstalled(download))
+    }
+
+    func testRemovalRefusesAnUnverifiedDirectory() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let download = modelDownload(files: [modelFile("weights.bin")])
+        let unverifiedURL = root.appendingPathComponent(download.id, isDirectory: true)
+        try FileManager.default.createDirectory(at: unverifiedURL, withIntermediateDirectories: true)
+        try Data("unverified".utf8).write(to: unverifiedURL.appendingPathComponent("keep.txt"))
+        let installer = ModelArtifactInstaller(modelsDirectory: root) { _, _ in }
+
+        XCTAssertThrowsError(try installer.removeInstalled(download))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unverifiedURL.appendingPathComponent("keep.txt").path))
+    }
 }
 
 private final class FetchCounter: @unchecked Sendable {
