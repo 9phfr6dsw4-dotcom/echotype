@@ -1,4 +1,5 @@
 import AudioToolbox
+import AVFoundation
 import CoreAudio
 import EchoTypeCore
 import Foundation
@@ -57,10 +58,13 @@ final class MicrophoneSettingsViewModel {
         updatePolicySnapshot()
     }
 
-    func movePriority(from source: IndexSet, to destination: Int) {
-        var ids = orderedDevices.map(\.id)
-        ids.move(fromOffsets: source, toOffset: destination)
-        policy.setPriorityOrder(ids)
+    func movePriority(id: String, direction: Int) {
+        guard let currentIndex = priorityDeviceIDs.firstIndex(of: id) else { return }
+        let destination = currentIndex + direction
+        guard priorityDeviceIDs.indices.contains(destination) else { return }
+        var updatedIDs = priorityDeviceIDs
+        updatedIDs.swapAt(currentIndex, destination)
+        policy.setPriorityOrder(updatedIDs)
         priorityDeviceIDs = policy.priorityDeviceIDs
         defaults.set(priorityDeviceIDs, forKey: Self.priorityDefaultsKey)
         updateCurrentDevice()
@@ -221,7 +225,7 @@ private enum AudioInputDeviceCatalog {
             0
         )?.takeRetainedValue() else { return false }
         if CFGetTypeID(value) == CFBooleanGetTypeID() {
-            return CFBooleanGetValue(unsafeBitCast(value, to: CFBoolean.self))
+            return CFBooleanGetValue(unsafeDowncast(value, to: CFBoolean.self))
         }
         return (value as? NSNumber)?.boolValue ?? false
     }

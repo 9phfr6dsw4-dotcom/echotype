@@ -181,7 +181,6 @@ struct EchoTypeSettingsView: View {
                         .foregroundStyle(microphones.currentReadyDevice == nil ? .red : .secondary)
                     Spacer()
                     Button("Refresh") { microphones.refreshDevices() }
-                    EditButton()
                 }
 
                 if microphones.orderedDevices.isEmpty {
@@ -191,6 +190,7 @@ struct EchoTypeSettingsView: View {
                 } else {
                     List {
                         ForEach(microphones.orderedDevices) { device in
+                            let index = microphones.priorityDeviceIDs.firstIndex(of: device.id) ?? 0
                             HStack {
                                 Text(device.name)
                                 Spacer()
@@ -199,10 +199,23 @@ struct EchoTypeSettingsView: View {
                                         .font(.caption)
                                         .foregroundStyle(.green)
                                 }
+                                Button {
+                                    microphones.movePriority(id: device.id, direction: -1)
+                                } label: {
+                                    Image(systemName: "arrow.up")
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(index == 0)
+                                .accessibilityLabel("Move \(device.name) up")
+                                Button {
+                                    microphones.movePriority(id: device.id, direction: 1)
+                                } label: {
+                                    Image(systemName: "arrow.down")
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(index == microphones.orderedDevices.count - 1)
+                                .accessibilityLabel("Move \(device.name) down")
                             }
-                        }
-                        .onMove { indices, destination in
-                            microphones.movePriority(from: indices, to: destination)
                         }
                     }
                     .frame(minHeight: 100, maxHeight: 190)
