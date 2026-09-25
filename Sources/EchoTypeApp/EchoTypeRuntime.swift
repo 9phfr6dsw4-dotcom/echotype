@@ -20,6 +20,7 @@ final class EchoTypeRuntime {
     let recordingAudioOptions: RecordingAudioOptionsController
 
     var deliveryMessage: String?
+    var deliveryDebugInfo: String?
 
     var preferredTranscriptionLanguageIdentifier: String {
         TranscriptionLanguagePreference.resolve(
@@ -149,6 +150,9 @@ final class EchoTypeRuntime {
         }
         dismissOverlayTask?.cancel()
         deliveryMessage = nil
+        deliveryDebugInfo = nil
+        overlayModel.deliveryMessage = nil
+        overlayModel.deliveryDebugInfo = nil
         let vocabularyTerms = TranscriptionVocabulary.terms(
             customTerms: customVocabulary.store.terms.map(\.term),
             learnedTerms: localLearning.store.learnedTerms
@@ -216,7 +220,7 @@ final class EchoTypeRuntime {
             recordingEngineID = nil
             return
         }
-        let insertionTargetAtStop = textInsertion.captureTarget()
+        let insertionTargetAtStop = textInsertion.captureDeliveryTarget()
         isDeliveringTranscript = true
         overlayModel.phase = .finishing
         overlayWindow.show()
@@ -245,13 +249,19 @@ final class EchoTypeRuntime {
             synchronizeOverlay(with: dictation)
             return
         }
-        let outcome = await textInsertion.deliver(
+        let report = await textInsertion.deliver(
             dictation.transcript,
             capturedTarget: insertionTargetAtStop,
             copyToClipboard: UserDefaults.standard.bool(forKey: "EchoType.copyToClipboard"),
             autoSend: UserDefaults.standard.bool(forKey: "EchoType.autoSend")
         )
-        deliveryMessage = Self.message(for: outcome)
+        let pasteSummary = Self.message(for: report.outcome)
+        deliveryMessage = report.clipboardRestorationWarning.map {
+            "\(pasteSummary) \($0)"
+        } ?? pasteSummary
+        deliveryDebugInfo = report.debugInfo
+        overlayModel.deliveryMessage = report.needsDeliveryNotice ? deliveryMessage : nil
+        overlayModel.deliveryDebugInfo = report.needsDeliveryNotice ? report.debugInfo : nil
         isDeliveringTranscript = false
         synchronizeOverlay(with: dictation)
     }
@@ -259,10 +269,24 @@ final class EchoTypeRuntime {
     private func discardRecordingInExcludedApp() async {
         recordingAudioOptions.stopRecording()
         recordingFeedback.recordingStopped()
+        let target = textInsertion.captureDeliveryTarget()
         await dictation.cancelAndDiscardRecording()
-        deliveryMessage = "Recording discarded because a password manager became active."
-        overlayModel.phase = .idle
-        overlayWindow.hide()
+        recordingStartedAt = nil
+        recordingEngineID = nil
+        deliveryMessage = "Not pasted: dictation was discarded because an excluded app became active."
+        let appName = target?.snapshot.applicationName ?? "Unknown"
+        let focusType = target?.focusedElementType ?? "Unavailable (no frontmost application)"
+        deliveryDebugInfo = "Frontmost app: \(appName)\nFocused element type: \(focusType)\nPaste skipped: Dictation was discarded before transcription because an excluded app became active."
+        overlayModel.phase = .done
+        overlayModel.deliveryMessage = deliveryMessage
+        overlayModel.deliveryDebugInfo = deliveryDebugInfo
+        overlayWindow.show()
+        dismissOverlayTask?.cancel()
+        dismissOverlayTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            self?.overlayWindow.hide()
+        }
     }
 
     private func synchronizeOverlay(with dictation: SpeechDictationViewModel) {
@@ -281,7 +305,8 @@ final class EchoTypeRuntime {
             overlayWindow.show()
             dismissOverlayTask?.cancel()
             dismissOverlayTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(1.2))
+                let hideDelay: Duration = overlayModel.deliveryMessage == nil ? .milliseconds(1200) : .seconds(5)
+                try? await Task.sleep(for: hideDelay)
                 guard !Task.isCancelled else { return }
                 self?.overlayWindow.hide()
             }
@@ -294,21 +319,21 @@ final class EchoTypeRuntime {
     private static func message(for outcome: TextInsertionService.Outcome) -> String {
         switch outcome {
         case .inserted:
-            "Inserted into the supported text field that was focused when you stopped dictation."
+            "Command-V was sent to the verified text field; EchoType cannot confirm whether the app accepted it."
+        case .insertedViaSameApplicationFallback:
+            "Command-V was sent because the same app remained in front; EchoType cannot confirm whether the app accepted it."
         case .insertedAndSubmitted:
-            "Inserted and sent with Return."
+            "Command-V and Return were sent to the verified text field; EchoType cannot confirm whether the app accepted them."
         case .copyOnly(.targetUnavailable):
-            "Not pasted: EchoType could not verify the text field focused when dictation stopped. Use Copy in the transcript."
+            "Not pasted: EchoType could not verify the foreground app when dictation stopped and text was ready. Use Copy in the transcript."
         case .copyOnly(.targetChanged):
-            "Not pasted: the app or focused text field changed after dictation stopped. Use Copy in the transcript."
+            "Not pasted: the foreground app changed before the text was ready. Use Copy in the transcript."
         case .copyOnly(.excludedApplication):
-            "Not pasted in an excluded password manager."
+            "Not pasted in an excluded application."
         case .copyOnly(.secureField):
-            "Not pasted into a secure field. Use Copy only if you intend to place the text there."
-        case .copyOnly(.notTextInput):
-            "Not pasted because the original focus was not a recognized text field. Use Copy in the transcript."
+            "Not pasted: the focused control is marked as a secure field. Use Copy only if you intend to place the transcript there."
         case .failed:
-            "Text could not be inserted. The transcript remains available in EchoType."
+            "Text could not be pasted. The transcript remains available in EchoType."
         }
     }
 }

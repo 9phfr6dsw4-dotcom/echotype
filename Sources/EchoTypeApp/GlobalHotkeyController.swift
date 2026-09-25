@@ -131,6 +131,7 @@ final class GlobalHotkeyController {
         }
     }
 
+    /// Requests Accessibility permission and opens its System Settings pane.
     func openAccessibilitySettings() {
         if !AXIsProcessTrusted() {
             let promptKey = "AXTrustedCheckOptionPrompt"

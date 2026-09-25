@@ -15,6 +15,8 @@ final class RecordingOverlayModel {
     var phase: Phase = .idle
     var transcript = ""
     var showLiveWords = true
+    var deliveryMessage: String?
+    var deliveryDebugInfo: String?
 }
 
 @MainActor
@@ -44,6 +46,10 @@ final class RecordingOverlayWindowController {
 
     func show() {
         hideTask?.cancel()
+        let desiredHeight: CGFloat = model.deliveryMessage == nil ? 112 : 205
+        if panel.frame.height != desiredHeight {
+            panel.setContentSize(NSSize(width: 520, height: desiredHeight))
+        }
         positionPanel()
         guard !panel.isVisible else { return }
         panel.alphaValue = 0
@@ -107,7 +113,10 @@ private struct RecordingOverlayView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, isExpanded ? 22 : 0)
                 .padding(.vertical, isExpanded ? 15 : 12)
-                .frame(width: isExpanded ? 520 : 180, height: isExpanded ? 112 : 32)
+                .frame(
+                    width: isExpanded ? 520 : 180,
+                    height: isExpanded ? (model.deliveryMessage == nil ? 112 : 205) : 32
+                )
                 .background {
                     RoundedRectangle(cornerRadius: isExpanded ? 28 : 16, style: .continuous)
                         .fill(Color.black)
@@ -121,14 +130,21 @@ private struct RecordingOverlayView: View {
                 }
             }
         }
-        .frame(width: 520, height: 112, alignment: .top)
+        .frame(width: 520, height: 205, alignment: .top)
         .onChange(of: model.phase, initial: true) { _, phase in
             withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
                 isExpanded = phase == .recording || phase == .finishing
+                    || (phase == .done && model.deliveryMessage != nil)
+            }
+        }
+        .onChange(of: model.deliveryMessage) { _, message in
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+                isExpanded = model.phase == .recording || model.phase == .finishing
+                    || (model.phase == .done && message != nil)
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("EchoType \(title). \(model.showLiveWords ? model.transcript : "")")
+        .accessibilityLabel("EchoType \(title). \(model.showLiveWords ? model.transcript : "") \(model.deliveryMessage ?? "") \(model.deliveryDebugInfo ?? "")")
     }
 
     private var expandedContent: some View {
@@ -164,6 +180,20 @@ private struct RecordingOverlayView: View {
                 Text(model.showLiveWords ? "Listening…" : "Live words hidden")
                     .font(.system(size: 13))
                     .foregroundStyle(.white.opacity(0.68))
+            }
+
+            if let deliveryMessage = model.deliveryMessage {
+                Text(deliveryMessage)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let deliveryDebugInfo = model.deliveryDebugInfo {
+                Text(deliveryDebugInfo)
+                    .font(.system(size: 9, weight: .regular, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(6)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

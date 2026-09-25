@@ -11,7 +11,7 @@ if [[ ! -d "$PACKAGED_APP" ]]; then
     printf 'Extracted packaged app does not exist: %s\n' "$PACKAGED_APP" >&2
     exit 1
 fi
-test -x "$PACKAGED_APP/Contents/MacOS/EchoTypeApp"
+test -x "$PACKAGED_APP/Contents/MacOS/EchoType"
 test -s "$PACKAGED_APP/Contents/Resources/EchoType_EchoTypeCore.bundle/model-manifest.json"
 
 mkdir -p "$SMOKE_PARENT"
@@ -24,7 +24,7 @@ ditto "$PACKAGED_APP" "$SMOKE_APP"
 cleanup() {
     status=$?
     trap - EXIT
-    pkill -x EchoTypeApp >/dev/null 2>&1 || true
+    pkill -x EchoType >/dev/null 2>&1 || true
     if [[ -d "$BUILD_BACKUP" ]]; then
         rm -rf "$BUILD_DIR"
         mv "$BUILD_BACKUP" "$BUILD_DIR"
@@ -50,15 +50,15 @@ printf 'Build directory is unavailable; launching extracted app from %s\n' "$SMO
 open -n -g "$SMOKE_APP"
 
 for _ in {1..10}; do
-    if pgrep -x EchoTypeApp >/dev/null 2>&1; then
+    if pgrep -x EchoType >/dev/null 2>&1; then
         sleep 3
-        if pgrep -x EchoTypeApp >/dev/null 2>&1; then
-            printf 'Clean-location launch smoke test passed; EchoTypeApp remained running.\n'
+        if pgrep -x EchoType >/dev/null 2>&1; then
+            printf 'Clean-location launch smoke test passed; EchoType remained running.\n'
             exit 0
         fi
     fi
     sleep 1
 done
 
-printf 'EchoTypeApp did not remain running after launch without its SwiftPM build directory.\n' >&2
+printf 'EchoType did not remain running after launch without its SwiftPM build directory.\n' >&2
 exit 1

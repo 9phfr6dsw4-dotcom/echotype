@@ -14,8 +14,12 @@ rm -rf "$APP_BUNDLE" "$ZIP_PATH" "$ZIP_PATH.sha256" "$VERIFY_DIR" "$ICONSET_DIR"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources" "dist"
 
 swift build --configuration release --product EchoTypeApp
-install -m 755 ".build/release/EchoTypeApp" "$APP_BUNDLE/Contents/MacOS/EchoTypeApp"
+install -m 755 ".build/release/EchoTypeApp" "$APP_BUNDLE/Contents/MacOS/EchoType"
 cp "Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
+test -x "$APP_BUNDLE/Contents/MacOS/EchoType"
+/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx 'EchoType'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx 'EchoType'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx 'EchoType'
 
 resource_bundles=()
 EXPECTED_CORE_BUNDLE=".build/release/EchoType_EchoTypeCore.bundle"
@@ -42,18 +46,24 @@ iconutil -c icns "$ICONSET_DIR" -o "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 
 codesign --force --deep --sign - "$APP_BUNDLE"
 codesign --verify --deep --strict "$APP_BUNDLE"
+/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx 'EchoType'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx 'EchoType'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx 'EchoType'
 plutil -lint "$APP_BUNDLE/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx '0.1.3'
-/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx '4'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx '0.1.4'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx '5'
 
 mkdir -p "$VERIFY_DIR"
 ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ZIP_PATH"
 ditto -x -k "$ZIP_PATH" "$VERIFY_DIR"
 EXTRACTED_APP="$VERIFY_DIR/${APP_NAME}.app"
-test -x "$EXTRACTED_APP/Contents/MacOS/EchoTypeApp"
+test -x "$EXTRACTED_APP/Contents/MacOS/EchoType"
+/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$EXTRACTED_APP/Contents/Info.plist" | grep -Fx 'EchoType'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$EXTRACTED_APP/Contents/Info.plist" | grep -Fx 'EchoType'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$EXTRACTED_APP/Contents/Info.plist" | grep -Fx 'EchoType'
 plutil -lint "$EXTRACTED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$EXTRACTED_APP/Contents/Info.plist" | grep -Fx '0.1.3'
-/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$EXTRACTED_APP/Contents/Info.plist" | grep -Fx '4'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$EXTRACTED_APP/Contents/Info.plist" | grep -Fx '0.1.4'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$EXTRACTED_APP/Contents/Info.plist" | grep -Fx '5'
 codesign --verify --deep --strict "$EXTRACTED_APP"
 test -n "$(find "$EXTRACTED_APP/Contents/Resources" -maxdepth 1 -type d -name '*.bundle' -print -quit)"
 (

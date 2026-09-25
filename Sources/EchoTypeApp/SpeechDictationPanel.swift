@@ -9,6 +9,7 @@ struct SpeechDictationPanel: View {
     @AppStorage("EchoType.copyToClipboard") private var copyToClipboard = false
     @AppStorage("EchoType.autoSend") private var autoSend = false
     @State private var shortcutCaptureError: String?
+    @State private var showingPasteDebugInfo = false
 
     private var dictation: SpeechDictationViewModel { runtime.dictation }
 
@@ -67,6 +68,16 @@ struct SpeechDictationPanel: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let deliveryDebugInfo = runtime.deliveryDebugInfo {
+                    DisclosureGroup("Paste debug info", isExpanded: $showingPasteDebugInfo) {
+                        Text(deliveryDebugInfo)
+                            .font(.system(.caption2, design: .monospaced))
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .font(.caption)
                 }
 
                 if let errorMessage = dictation.errorMessage {
@@ -132,7 +143,7 @@ struct SpeechDictationPanel: View {
                         }
                         .buttonStyle(.bordered)
                     } else {
-                        Button("Fix Accessibility Permission") {
+                        Button("Request Accessibility Access") {
                             runtime.hotkey.requestEnable()
                         }
                         .buttonStyle(.borderedProminent)

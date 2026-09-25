@@ -36,7 +36,7 @@ public enum GlobalHotkeyStatusPolicy {
         lastRecognizedAction: String?
     ) -> String {
         guard accessibilityGranted else {
-            return "Not listening: allow EchoType in System Settings → Privacy & Security → Accessibility. Input Monitoring is not required for this event monitor."
+            return "Not listening: choose Request Accessibility Access, enable EchoType in System Settings → Privacy & Security → Device Control and Data Access, then return to EchoType. Input Monitoring is not required."
         }
         guard hotkeyEnabledPreference else {
             return "Hotkey is off. Enable it once; EchoType remembers this choice and restores it at launch."

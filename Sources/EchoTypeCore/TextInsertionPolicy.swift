@@ -3,6 +3,7 @@ import Foundation
 public struct TextInsertionSnapshot: Equatable, Sendable {
     public let processIdentifier: Int32
     public let bundleIdentifier: String?
+    public let applicationName: String?
     public let focusedRole: String?
     public let focusedSubrole: String?
 
@@ -10,12 +11,53 @@ public struct TextInsertionSnapshot: Equatable, Sendable {
         processIdentifier: Int32,
         bundleIdentifier: String?,
         focusedRole: String?,
-        focusedSubrole: String? = nil
+        focusedSubrole: String? = nil,
+        applicationName: String? = nil
     ) {
         self.processIdentifier = processIdentifier
         self.bundleIdentifier = bundleIdentifier
+        self.applicationName = applicationName
         self.focusedRole = focusedRole
         self.focusedSubrole = focusedSubrole
+    }
+}
+
+public struct TextInsertionDiagnostic: Equatable, Sendable {
+    public let appAtDictationStop: String
+    public let appWhenTextWasReady: String
+    public let focusedElementAtStop: String
+    public let focusedElementWhenReady: String
+    public let pasteResult: String
+    public let clipboardRestorationWarning: String?
+
+    public init(
+        appAtDictationStop: String,
+        appWhenTextWasReady: String,
+        focusedElementAtStop: String,
+        focusedElementWhenReady: String,
+        pasteResult: String,
+        clipboardRestorationWarning: String? = nil
+    ) {
+        self.appAtDictationStop = appAtDictationStop
+        self.appWhenTextWasReady = appWhenTextWasReady
+        self.focusedElementAtStop = focusedElementAtStop
+        self.focusedElementWhenReady = focusedElementWhenReady
+        self.pasteResult = pasteResult
+        self.clipboardRestorationWarning = clipboardRestorationWarning
+    }
+
+    public var description: String {
+        var lines = [
+            "App at dictation stop: \(appAtDictationStop)",
+            "App when text was ready: \(appWhenTextWasReady)",
+            "Focused element at stop: \(focusedElementAtStop)",
+            "Focused element when ready: \(focusedElementWhenReady)",
+            "Paste result: \(pasteResult)"
+        ]
+        if let clipboardRestorationWarning {
+            lines.append("Clipboard: \(clipboardRestorationWarning)")
+        }
+        return lines.joined(separator: "\n")
     }
 }
 
@@ -24,11 +66,11 @@ public enum TextInsertionBlockReason: Equatable, Sendable {
     case targetChanged
     case excludedApplication
     case secureField
-    case notTextInput
 }
 
 public enum TextInsertionDecision: Equatable, Sendable {
     case insert
+    case pasteInSameApplication
     case copyOnly(TextInsertionBlockReason)
 }
 
@@ -63,20 +105,29 @@ public struct TextInsertionPolicy: Sendable {
               !isExcluded(bundleIdentifier: current.bundleIdentifier) else {
             return .copyOnly(.excludedApplication)
         }
-        guard captured.processIdentifier == current.processIdentifier,
-              sameFocusedElement else {
+        guard sameApplication(captured, current) else {
             return .copyOnly(.targetChanged)
         }
-        if isSecureField(captured) || isSecureField(current) {
+        guard !isSecureField(captured), !isSecureField(current) else {
             return .copyOnly(.secureField)
         }
-        guard let role = current.focusedRole, textInputRoles.contains(role) else {
-            return .copyOnly(.notTextInput)
+        if sameFocusedElement,
+           let role = current.focusedRole,
+           textInputRoles.contains(role) {
+            return .insert
         }
-        return .insert
+        return .pasteInSameApplication
     }
 
     private func isSecureField(_ snapshot: TextInsertionSnapshot) -> Bool {
         snapshot.focusedRole == "AXSecureTextField" || snapshot.focusedSubrole == "AXSecureTextField"
+    }
+
+    public func sameApplication(_ lhs: TextInsertionSnapshot, _ rhs: TextInsertionSnapshot) -> Bool {
+        // Bundle identity represents the foreground app; PID may change if that app relaunches.
+        if let leftBundle = lhs.bundleIdentifier, let rightBundle = rhs.bundleIdentifier {
+            return leftBundle.caseInsensitiveCompare(rightBundle) == .orderedSame
+        }
+        return lhs.processIdentifier > 0 && lhs.processIdentifier == rhs.processIdentifier
     }
 }
