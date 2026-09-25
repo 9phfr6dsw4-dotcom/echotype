@@ -10,7 +10,7 @@ ZIP_PATH="dist/${APP_NAME}.zip"
 VERIFY_DIR="dist/verify-extracted"
 ICONSET_DIR="dist/AppIcon.iconset"
 
-rm -rf "$APP_BUNDLE" "$ZIP_PATH" "$VERIFY_DIR" "$ICONSET_DIR"
+rm -rf "$APP_BUNDLE" "$ZIP_PATH" "$ZIP_PATH.sha256" "$VERIFY_DIR" "$ICONSET_DIR"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources" "dist"
 
 swift build --configuration release --product EchoTypeApp
@@ -45,5 +45,9 @@ test -x "$EXTRACTED_APP/Contents/MacOS/EchoTypeApp"
 plutil -lint "$EXTRACTED_APP/Contents/Info.plist"
 codesign --verify --deep --strict "$EXTRACTED_APP"
 test -n "$(find "$EXTRACTED_APP/Contents/Resources" -maxdepth 1 -type d -name '*.bundle' -print -quit)"
-shasum -a 256 "$ZIP_PATH" > "$ZIP_PATH.sha256"
+(
+    cd "$(dirname "$ZIP_PATH")"
+    shasum -a 256 "$(basename "$ZIP_PATH")" > "$(basename "$ZIP_PATH").sha256"
+    shasum -a 256 -c "$(basename "$ZIP_PATH").sha256"
+)
 printf 'Packaged and verified: %s\n' "$ZIP_PATH"

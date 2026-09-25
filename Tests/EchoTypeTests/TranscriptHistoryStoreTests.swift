@@ -221,6 +221,24 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         XCTAssertFalse(markdown.contains("First transcript"))
     }
 
+    func testPerTranscriptMarkdownArchiveWorksWhenLocalHistoryIsDisabled() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let archiveDirectory = root.appendingPathComponent("archive", isDirectory: true)
+        try FileManager.default.createDirectory(at: archiveDirectory, withIntermediateDirectories: true)
+        let store = TranscriptHistoryStore(
+            applicationSupportDirectory: root,
+            settings: TranscriptHistorySettings(historyEnabled: false)
+        )
+        let record = makeRecord(text: "Archive without local history.")
+
+        let archiveURL = try store.archiveMarkdown(for: record, to: archiveDirectory)
+        let markdown = try String(contentsOf: archiveURL, encoding: .utf8)
+
+        XCTAssertTrue(markdown.contains("Archive without local history."))
+        XCTAssertTrue(try store.records().isEmpty)
+    }
+
     private func makeRecord(
         id: UUID = UUID(),
         text: String = "Transcript",

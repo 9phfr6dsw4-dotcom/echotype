@@ -30,7 +30,7 @@ struct SpeechDictationPanel: View {
                     actionButton
                 }
 
-                Text("Apple Speech needs its system assets prepared once. Parakeet and Whisper use only their downloaded local model files. Live words are available with Apple Speech; all backends delete temporary audio when transcription finishes.")
+                Text("Apple Speech needs its system assets prepared once for the selected language. Parakeet and Whisper use only their downloaded local model files. Live words are available with Apple Speech; all backends delete temporary audio when transcription finishes.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -209,7 +209,11 @@ struct SpeechDictationPanel: View {
                 .buttonStyle(.borderedProminent)
             } else if needsApplePreparation {
                 Button {
-                    Task { await dictation.prepareAppleSpeech() }
+                    Task {
+                        await dictation.prepareAppleSpeech(
+                            localeIdentifier: runtime.preferredTranscriptionLanguageIdentifier
+                        )
+                    }
                 } label: {
                     Label("Prepare Apple Speech", systemImage: "arrow.down.circle")
                 }
@@ -237,13 +241,15 @@ struct SpeechDictationPanel: View {
     }
 
     private var needsApplePreparation: Bool {
-        selectedBackend == .appleSpeech && !dictation.assetsPrepared
+        selectedBackend == .appleSpeech && !dictation.isAppleSpeechPrepared(
+            for: runtime.preferredTranscriptionLanguageIdentifier
+        )
     }
 
     private var canStartRecording: Bool {
         switch selectedBackend {
         case .some(.appleSpeech):
-            dictation.assetsPrepared
+            dictation.isAppleSpeechPrepared(for: runtime.preferredTranscriptionLanguageIdentifier)
         case .some(.parakeetV3), .some(.whisperLargeV3Turbo):
             runtime.modelLibrary.installedModelDirectory(for: runtime.modelLibrary.selectedEngineID) != nil
         case .some(.unavailable), .none:

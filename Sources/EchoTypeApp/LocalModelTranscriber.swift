@@ -7,8 +7,6 @@ struct LocalModelTranscriber {
     enum TranscriptionError: LocalizedError {
         case unavailableBackend(String)
         case missingLocalAsset(String)
-        case missingParakeetVocabularySupport
-        case missingParakeetTokenTimings
         case unsupportedParakeetLanguage(String)
         case emptyTranscript
 
@@ -18,10 +16,6 @@ struct LocalModelTranscriber {
                 return "The selected transcription engine is not installed or supported: \(engineID)."
             case .missingLocalAsset(let path):
                 return "A required local model file is missing: \(path). Reinstall the model from EchoType."
-            case .missingParakeetVocabularySupport:
-                return "Parakeet custom vocabulary needs the optional 2.37 GB CTC rescoring model. Install it from Speech Models or switch to Apple Speech/Whisper; EchoType does not download it automatically."
-            case .missingParakeetTokenTimings:
-                return "Parakeet did not provide token timings, so custom vocabulary could not be safely applied to this recording."
             case .unsupportedParakeetLanguage(let language):
                 return "Parakeet v3 does not support the selected language (\(language)). Choose one of its 25 listed languages or use Whisper/Apple Speech."
             case .emptyTranscript:
@@ -77,9 +71,6 @@ struct LocalModelTranscriber {
             language = nil
         }
 
-        guard vocabularyTerms.isEmpty || ctcVocabularyDirectory != nil else {
-            throw TranscriptionError.missingParakeetVocabularySupport
-        }
         let models = try AsrModels.loadLocal(from: modelDirectory, version: .v3)
         let manager = AsrManager(config: .default, models: models)
         var decoderState = try TdtDecoderState()
@@ -88,33 +79,40 @@ struct LocalModelTranscriber {
             decoderState: &decoderState,
             language: language
         )
-        guard !vocabularyTerms.isEmpty else { return try nonempty(result.text) }
-        guard let ctcVocabularyDirectory else {
-            throw TranscriptionError.missingParakeetVocabularySupport
-        }
-        guard let tokenTimings = result.tokenTimings, !tokenTimings.isEmpty else {
-            throw TranscriptionError.missingParakeetTokenTimings
+        let baseTranscript = try nonempty(result.text)
+        let tokenTimings = result.tokenTimings
+        guard ParakeetVocabularyAvailability.canApplyCustomTerms(
+            hasTerms: !vocabularyTerms.isEmpty,
+            companionInstalled: ctcVocabularyDirectory != nil,
+            hasTokenTimings: tokenTimings?.isEmpty == false
+        ), let ctcVocabularyDirectory,
+           let tokenTimings else {
+            return baseTranscript
         }
 
-        let ctcModels = try await CtcModels.loadDirect(
-            from: ctcVocabularyDirectory,
-            variant: .ctc06b
-        )
-        let vocabulary = CustomVocabularyContext(
-            terms: vocabularyTerms.map { CustomVocabularyTerm(text: $0) }
-        )
-        let boosting = try await VocabularyBoostingSession(
-            vocabulary: vocabulary,
-            ctcModels: ctcModels
-        )
-        let audioSamples = try AudioConverter().resampleAudioFile(audioURL)
-        let rescored = await boosting.rescore(
-            text: result.text,
-            tokenTimings: tokenTimings,
-            audioSamples: audioSamples
-        )
-        let finalText = rescored?.wasModified == true ? (rescored?.text ?? result.text) : result.text
-        return try nonempty(finalText)
+        do {
+            let ctcModels = try await CtcModels.loadDirect(
+                from: ctcVocabularyDirectory,
+                variant: .ctc06b
+            )
+            let vocabulary = CustomVocabularyContext(
+                terms: vocabularyTerms.map { CustomVocabularyTerm(text: $0) }
+            )
+            let boosting = try await VocabularyBoostingSession(
+                vocabulary: vocabulary,
+                ctcModels: ctcModels
+            )
+            let audioSamples = try AudioConverter().resampleAudioFile(audioURL)
+            let rescored = await boosting.rescore(
+                text: result.text,
+                tokenTimings: tokenTimings,
+                audioSamples: audioSamples
+            )
+            let finalText = rescored?.wasModified == true ? (rescored?.text ?? result.text) : result.text
+            return try nonempty(finalText)
+        } catch {
+            return baseTranscript
+        }
     }
 
     private static func transcribeWhisper(

@@ -21,6 +21,13 @@ final class EchoTypeRuntime {
 
     var deliveryMessage: String?
 
+    var preferredTranscriptionLanguageIdentifier: String {
+        TranscriptionLanguagePreference.resolve(
+            UserDefaults.standard.string(forKey: "EchoType.transcriptionLanguage"),
+            systemLanguageIdentifier: Locale.current.identifier
+        )
+    }
+
     @ObservationIgnored private let overlayWindow: RecordingOverlayWindowController
     @ObservationIgnored private var dismissOverlayTask: Task<Void, Never>?
     @ObservationIgnored private var capturedInsertionTarget: CapturedInsertionTarget?
@@ -54,6 +61,10 @@ final class EchoTypeRuntime {
         self.textInsertion = TextInsertionService()
         self.overlayWindow = RecordingOverlayWindowController(model: overlayModel)
 
+        textInsertion.onTranscriptCorrection = { [weak localLearning] original, corrected in
+            localLearning?.observeTranscriptCorrection(original: original, corrected: corrected)
+        }
+
         dictation.onChange = { [weak self] state in
             self?.synchronizeOverlay(with: state)
         }
@@ -78,8 +89,9 @@ final class EchoTypeRuntime {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self,
-                      self.dictation.isRecording,
+                guard let self else { return }
+                self.textInsertion.cancelCorrectionObservationIfTargetIsInvalid()
+                guard self.dictation.isRecording,
                       self.textInsertion.isFrontmostAppExcluded() else { return }
                 await self.discardRecordingInExcludedApp()
             }
@@ -106,8 +118,9 @@ final class EchoTypeRuntime {
             return
         }
         let modelDirectory = modelLibrary.installedModelDirectory(for: engineID)
-        if backend == .appleSpeech, !dictation.assetsPrepared {
-            dictation.errorMessage = "Prepare Apple Speech in EchoType before recording with Apple Speech."
+        let languageIdentifier = preferredTranscriptionLanguageIdentifier
+        if backend == .appleSpeech, !dictation.isAppleSpeechPrepared(for: languageIdentifier) {
+            dictation.errorMessage = "Prepare Apple Speech for the selected language in EchoType before recording."
             return
         }
         if backend != .appleSpeech, modelDirectory == nil {
@@ -117,8 +130,6 @@ final class EchoTypeRuntime {
         dismissOverlayTask?.cancel()
         deliveryMessage = nil
         capturedInsertionTarget = textInsertion.captureTarget()
-        let languageIdentifier = UserDefaults.standard.string(forKey: "EchoType.transcriptionLanguage")
-            ?? Locale.current.identifier
         let vocabularyTerms = TranscriptionVocabulary.terms(
             customTerms: customVocabulary.store.terms.map(\.term),
             learnedTerms: localLearning.store.learnedTerms

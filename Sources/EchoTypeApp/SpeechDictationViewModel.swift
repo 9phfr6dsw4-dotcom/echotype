@@ -38,14 +38,21 @@ final class SpeechDictationViewModel {
         Self.removeInterruptedRecordings()
     }
 
-    func prepareAppleSpeech() async {
-        guard !isPreparingAssets, !assetsPrepared else { return }
+    func isAppleSpeechPrepared(for localeIdentifier: String) -> Bool {
+        assetsPrepared && PreparedSpeechLocalePolicy.isPrepared(
+            preparedIdentifier: preparedLocaleIdentifier,
+            requestedIdentifier: localeIdentifier
+        )
+    }
+
+    func prepareAppleSpeech(localeIdentifier: String = Locale.current.identifier) async {
+        guard !isPreparingAssets, !isAppleSpeechPrepared(for: localeIdentifier) else { return }
         isPreparingAssets = true
         errorMessage = nil
         defer { isPreparingAssets = false }
 
         do {
-            preparedLocaleIdentifier = try await transcriber.prepare(localeIdentifier: Locale.current.identifier)
+            preparedLocaleIdentifier = try await transcriber.prepare(localeIdentifier: localeIdentifier)
             assetsPrepared = true
         } catch {
             errorMessage = error.localizedDescription
@@ -63,7 +70,7 @@ final class SpeechDictationViewModel {
         recordingVocabularyTerms = vocabularyTerms
         switch backend {
         case .appleSpeech:
-            await startAppleSpeechRecording()
+            await startAppleSpeechRecording(languageIdentifier: languageIdentifier)
             if isRecording {
                 recordingBackend = .appleSpeech
                 recordingLanguageIdentifier = languageIdentifier
@@ -85,8 +92,12 @@ final class SpeechDictationViewModel {
         }
     }
 
-    private func startAppleSpeechRecording() async {
-        guard assetsPrepared, !isRecording, !isTranscribing else { return }
+    private func startAppleSpeechRecording(languageIdentifier: String) async {
+        guard !isRecording, !isTranscribing else { return }
+        guard isAppleSpeechPrepared(for: languageIdentifier) else {
+            errorMessage = "Prepare Apple Speech for the selected language in EchoType before recording."
+            return
+        }
         errorMessage = nil
 
         guard await microphoneAccessGranted() else {

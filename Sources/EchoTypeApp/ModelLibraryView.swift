@@ -40,7 +40,7 @@ struct ModelLibraryView: View {
                     ProgressView("Loading model catalog…")
                 }
 
-                Label("External models download only when you ask. Apple speech assets are checked or prepared only when you choose Prepare. Temporary audio is deleted after transcription.", systemImage: "lock.shield")
+                Label("External models download only after you request a model or add a custom term that needs the Parakeet companion. Apple speech assets are prepared only when you choose Prepare. Temporary audio is deleted after transcription.", systemImage: "lock.shield")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -92,7 +92,7 @@ struct ModelLibraryView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Speech Models")
                 .font(.largeTitle.weight(.semibold))
-            Text("Choose an on-device transcription engine. Downloads start only when you request them.")
+            Text("Choose an on-device transcription engine. Parakeet includes its custom-vocabulary add-on; every file is checksum-verified.")
                 .font(.title3)
                 .foregroundStyle(.secondary)
         }
@@ -102,6 +102,7 @@ struct ModelLibraryView: View {
         let ready = library.isReady(engine)
         let selected = library.selectedEngineID == engine.id
         let download = library.download(for: engine)
+        let plannedDownloadBytes = library.initialInstallSize(forEngineID: engine.id)
         let downloading = download.map { library.activeDownloadIDs.contains($0.id) } ?? false
         let progress = download.flatMap { library.progressByDownloadID[$0.id] }
 
@@ -141,6 +142,12 @@ struct ModelLibraryView: View {
 
                 if let download {
                     detailRow("Download", "\(download.bytes.formatted()) bytes · \(download.license ?? "License metadata unavailable")")
+                    if engine.id == ModelSelection.parakeetEngineID, !ready {
+                        detailRow(
+                            "Total before starting",
+                            "\(formattedSize(plannedDownloadBytes))\(library.isParakeetVocabularyInstalled ? " (vocabulary add-on already installed)" : " (Parakeet + vocabulary add-on)")"
+                        )
+                    }
                 } else if engine.id == ModelSelection.appleSpeechEngineID {
                     detailRow("Speech assets", "Managed by macOS; first use may download assets from Apple after you choose Prepare.")
                 } else {
@@ -182,7 +189,7 @@ struct ModelLibraryView: View {
                         Button {
                             Task { await library.download(engineID: engine.id) }
                         } label: {
-                            Label("Download (\(download.bytes.formatted()) bytes)", systemImage: "arrow.down.to.line")
+                            Label("Download (\(formattedSize(plannedDownloadBytes)))", systemImage: "arrow.down.to.line")
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -211,7 +218,7 @@ struct ModelLibraryView: View {
 
         return GroupBox("Optional Parakeet custom vocabulary") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Uses the local CTC acoustic rescoring model to bias recognition toward dictionary and learned terms. This separate model is about \(formattedSize); it is not downloaded unless you click below, and every file is checksum-verified.")
+                Text("Uses the local CTC acoustic rescoring model to bias recognition toward dictionary and learned terms. It downloads with Parakeet or automatically the first time you add a custom term if Parakeet is already installed. Every file is checksum-verified.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -241,7 +248,7 @@ struct ModelLibraryView: View {
                         Button {
                             Task { await library.download(downloadID: download.id) }
                         } label: {
-                            Label("Download (\(formattedSize))", systemImage: "arrow.down.to.line")
+                            Label("Download Now (\(formattedSize))", systemImage: "arrow.down.to.line")
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(downloading)
@@ -251,6 +258,10 @@ struct ModelLibraryView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
         }
+    }
+
+    private func formattedSize(_ bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .decimal)
     }
 
     private func detailRow(_ title: String, _ value: String) -> some View {

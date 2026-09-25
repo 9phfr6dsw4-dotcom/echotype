@@ -88,8 +88,50 @@ final class RecordingOverlayWindowController {
 
 private struct RecordingOverlayView: View {
     let model: RecordingOverlayModel
+    @State private var isExpanded = false
 
     var body: some View {
+        ZStack(alignment: .top) {
+            if model.phase != .idle {
+                Group {
+                    if isExpanded {
+                        expandedContent
+                            .transition(.opacity)
+                    } else {
+                        Circle()
+                            .fill(model.phase == .done ? Color.green : Color.red)
+                            .frame(width: 8, height: 8)
+                            .transition(.opacity)
+                    }
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, isExpanded ? 22 : 0)
+                .padding(.vertical, isExpanded ? 15 : 12)
+                .frame(width: isExpanded ? 520 : 180, height: isExpanded ? 112 : 32)
+                .background {
+                    RoundedRectangle(cornerRadius: isExpanded ? 28 : 16, style: .continuous)
+                        .fill(Color.black)
+                        .overlay {
+                            if isExpanded {
+                                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                            }
+                        }
+                        .shadow(color: .black.opacity(isExpanded ? 0.24 : 0), radius: 18, y: 6)
+                }
+            }
+        }
+        .frame(width: 520, height: 112, alignment: .top)
+        .onChange(of: model.phase, initial: true) { _, phase in
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+                isExpanded = phase == .recording || phase == .finishing
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("EchoType \(title). \(model.showLiveWords ? model.transcript : "")")
+    }
+
+    private var expandedContent: some View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 8) {
                 Circle()
@@ -124,21 +166,6 @@ private struct RecordingOverlayView: View {
                     .foregroundStyle(.white.opacity(0.68))
             }
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 22)
-        .padding(.vertical, 15)
-        .frame(width: 520, height: 112, alignment: .center)
-        .background {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.black)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.24), radius: 18, y: 6)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("EchoType \(title). \(model.showLiveWords ? model.transcript : "")")
     }
 
     private var title: String {

@@ -9,6 +9,8 @@ struct EchoTypeSettingsView: View {
     @AppStorage("EchoType.showLiveWords") private var showLiveWords = true
     @AppStorage(RecordingFeedbackController.dockIconPreferenceKey) private var changeDockIconWhileRecording = false
     @AppStorage(RecordingFeedbackController.soundsPreferenceKey) private var playRecordingSounds = false
+    @AppStorage(TextInsertionService.correctionLearningPreferenceKey) private var learnRecentInsertionCorrections = false
+    @AppStorage("EchoType.transcriptionLanguage") private var transcriptionLanguage = ""
     @State private var newVocabularyTerm = ""
     @State private var vocabularyDrafts: [UUID: String] = [:]
 
@@ -17,6 +19,7 @@ struct EchoTypeSettingsView: View {
     private var microphones: MicrophoneSettingsViewModel { runtime.microphones }
     private var learning: LocalLearningViewModel { runtime.localLearning }
     private var vocabulary: CustomVocabularyViewModel { runtime.customVocabulary }
+    private var modelLibrary: ModelLibraryViewModel { runtime.modelLibrary }
     private var recordingAudioOptions: RecordingAudioOptionsController { runtime.recordingAudioOptions }
 
     var body: some View {
@@ -32,6 +35,7 @@ struct EchoTypeSettingsView: View {
 
                 historySettings
                 microphoneSettings
+                transcriptionLanguageSettings
                 excludedApplicationsSettings
                 localLearningSettings
                 customVocabularySettings
@@ -61,17 +65,21 @@ struct EchoTypeSettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes EchoType transcript history and audio recordings. Learned words and files outside EchoType's transcript store are kept.")
+            Text("This removes EchoType transcript history and audio recordings, but does not delete Markdown archive files in your chosen folder or learned words. Files outside EchoType's transcript store are kept.")
         }
         .onAppear {
             runtime.overlayModel.showLiveWords = showLiveWords
             runtime.recordingFeedback.setDockIconChangeEnabled(changeDockIconWhileRecording)
+            runtime.textInsertion.setCorrectionLearningEnabled(learnRecentInsertionCorrections)
         }
         .onChange(of: showLiveWords) { _, enabled in
             runtime.overlayModel.showLiveWords = enabled
         }
         .onChange(of: changeDockIconWhileRecording) { _, enabled in
             runtime.recordingFeedback.setDockIconChangeEnabled(enabled)
+        }
+        .onChange(of: learnRecentInsertionCorrections) { _, enabled in
+            runtime.textInsertion.setCorrectionLearningEnabled(enabled)
         }
         .frame(minWidth: 760, minHeight: 580)
     }
@@ -102,6 +110,11 @@ struct EchoTypeSettingsView: View {
                         else { history.archiveDirectoryPath = nil }
                     }
                 ))
+                Text("Markdown archiving is independent of local history and retention. When a folder is selected, each recognized transcript is archived there even if local history is off; clearing EchoType history does not delete those archive files.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 if let path = history.archiveDirectoryPath {
                     HStack {
                         Text(path)
@@ -129,6 +142,37 @@ struct EchoTypeSettingsView: View {
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var supportedPinnedLanguages: [SupportedLanguage] {
+        guard let catalog = modelLibrary.catalog,
+              let engine = catalog.engine(id: ModelSelection.parakeetEngineID) else {
+            return []
+        }
+        return engine.supportedLanguages.sorted { $0.name < $1.name }
+    }
+
+    private var transcriptionLanguageSettings: some View {
+        GroupBox("Transcription language") {
+            VStack(alignment: .leading, spacing: 8) {
+                Picker("Preferred language", selection: $transcriptionLanguage) {
+                    Text("Automatic (current Mac language)").tag("")
+                    if !transcriptionLanguage.isEmpty,
+                       !supportedPinnedLanguages.contains(where: { $0.code == transcriptionLanguage }) {
+                        Text("Other — \(transcriptionLanguage)").tag(transcriptionLanguage)
+                    }
+                    ForEach(supportedPinnedLanguages) { language in
+                        Text("\(language.name) (\(language.code))").tag(language.code)
+                    }
+                }
+                Text("The pinned language is passed to the selected engine. The list shows Parakeet v3's supported languages; Automatic uses your Mac's current language for Apple Speech and Whisper. If Parakeet cannot support the selected or automatic language, EchoType shows an error instead of silently switching.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
@@ -187,6 +231,15 @@ struct EchoTypeSettingsView: View {
     private var localLearningSettings: some View {
         GroupBox("Local learning") {
             VStack(alignment: .leading, spacing: 12) {
+                Toggle(
+                    "Learn corrections made to recent EchoType insertions",
+                    isOn: $learnRecentInsertionCorrections
+                )
+                Text("Off by default. When enabled, EchoType watches the same field it just pasted into for up to 10 seconds. It considers only a selected range wholly inside that insertion, waits 800 ms after a value change, and reads only the validated replacement range. It never reads whole-field text, window titles, URLs, secure fields, or excluded apps. If Accessibility range, notification, or target checks are unavailable or ambiguous, nothing is learned. Accepted one-word corrections use the existing local-learning rule and need at least three repeats.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Toggle("Ask me before adding learned words", isOn: Binding(
                     get: { learning.askBeforeAdding },
                     set: { learning.askBeforeAdding = $0 }
@@ -259,13 +312,62 @@ struct EchoTypeSettingsView: View {
         }
     }
 
+    private var parakeetVocabularyStatus: some View {
+        let isAvailable = modelLibrary.optionalDownload(forEngineID: ModelSelection.parakeetEngineID) != nil
+        let isInstalled = modelLibrary.isParakeetVocabularyInstalled
+        let isDownloading = modelLibrary.isParakeetVocabularyDownloading
+        let progress = modelLibrary.parakeetVocabularyProgress
+        let parakeetInstalled = modelLibrary.isParakeetInstalled
+
+        return VStack(alignment: .leading, spacing: 6) {
+            if !isAvailable {
+                Label("Parakeet CTC companion status unavailable.", systemImage: "questionmark.circle")
+                    .foregroundStyle(.secondary)
+            } else {
+                Label(
+                    modelLibrary.parakeetVocabularyStatus,
+                    systemImage: isInstalled ? "checkmark.circle.fill" : isDownloading ? "arrow.down.circle" : "info.circle"
+                )
+                .foregroundStyle(isInstalled ? .green : .secondary)
+                .textSelection(.enabled)
+            }
+
+            if isDownloading, let progress {
+                ProgressView(
+                    value: Double(progress.verifiedBytes),
+                    total: Double(max(progress.totalBytes, 1))
+                )
+                Text("Verified \(progress.verifiedFileCount) of \(progress.fileCount) companion files")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !isInstalled, !isDownloading, parakeetInstalled {
+                Button("Retry vocabulary add-on download") {
+                    Task { await modelLibrary.ensureParakeetVocabularyCompanionForCustomTerms() }
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if let errorMessage = modelLibrary.parakeetVocabularyErrorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+            }
+        }
+        .font(.caption)
+    }
+
     private var customVocabularySettings: some View {
         GroupBox("Custom vocabulary") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Add names and unusual words to bias supported local speech engines. Apple Speech uses up to 100 contextual phrases; Whisper uses decoder prompt tokens; Parakeet requires its optional 2.37 GB CTC rescoring model in Speech Models. Nothing is downloaded automatically.")
+                Text("Add names and unusual words to bias supported local speech engines. Apple Speech uses up to 100 contextual phrases; Whisper uses decoder prompt tokens. Parakeet's optional 2.37 GB CTC companion is included in an explicit Parakeet download (the combined size is shown first), or downloaded when you add a custom term if Parakeet is already installed. Missing or failed companion downloads disable only custom-vocabulary rescoring; base Parakeet transcripts continue.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                parakeetVocabularyStatus
 
                 HStack {
                     TextField("Name or unusual word", text: $newVocabularyTerm)
@@ -311,6 +413,9 @@ struct EchoTypeSettingsView: View {
                 Toggle("Show live words in the recording overlay", isOn: $showLiveWords)
                 Toggle("Change the Dock icon while recording", isOn: $changeDockIconWhileRecording)
                 Toggle("Play optional recording start/stop sounds", isOn: $playRecordingSounds)
+                Toggle("Keep microphone on between recordings (instant-on)", isOn: .constant(false))
+                    .disabled(true)
+                    .accessibilityHint("Unavailable in this build; EchoType never leaves the microphone active between recordings.")
                 Text("These cues are off by default. The overlay can show only a recording indicator when live words are hidden; temporary audio is still deleted after transcription unless audio saving is enabled above.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -440,6 +545,7 @@ struct EchoTypeSettingsView: View {
         do {
             _ = try vocabulary.addTerm(newVocabularyTerm)
             newVocabularyTerm = ""
+            Task { await runtime.modelLibrary.ensureParakeetVocabularyCompanionForCustomTerms() }
         } catch {
             // The view model exposes a local, user-readable error message.
         }
@@ -457,6 +563,7 @@ struct EchoTypeSettingsView: View {
         do {
             _ = try vocabulary.editTerm(id: term.id, to: draft)
             vocabularyDrafts.removeValue(forKey: term.id)
+            Task { await runtime.modelLibrary.ensureParakeetVocabularyCompanionForCustomTerms() }
         } catch {
             // The view model exposes a local, user-readable error message.
         }

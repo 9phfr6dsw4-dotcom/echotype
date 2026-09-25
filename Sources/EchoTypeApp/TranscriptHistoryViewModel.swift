@@ -87,12 +87,17 @@ final class TranscriptHistoryViewModel {
         modelID: String,
         audioData: Data? = nil
     ) throws {
-        guard settings.historyEnabled else { return }
         let record = TranscriptRecord(text: text, duration: duration, modelID: modelID)
         let store = makeStore()
-        try store.save(record, audioData: audioData)
-        _ = try store.prune()
-        if let archiveDirectoryPath {
+        let persistencePlan = TranscriptPersistencePlan(
+            historyEnabled: settings.historyEnabled,
+            archiveDirectorySelected: archiveDirectoryPath != nil
+        )
+        if persistencePlan.saveToLocalHistory {
+            try store.save(record, audioData: audioData)
+            _ = try store.prune()
+        }
+        if persistencePlan.writeMarkdownArchive, let archiveDirectoryPath {
             try store.archiveMarkdown(for: record, to: URL(fileURLWithPath: archiveDirectoryPath, isDirectory: true))
         }
         refresh()
