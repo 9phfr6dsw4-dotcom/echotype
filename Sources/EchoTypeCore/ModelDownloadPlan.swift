@@ -29,22 +29,6 @@ public enum ModelDownloadPlan {
         }
     }
 
-    /// Returns the companion only when custom terms are added while the
-    /// Parakeet base model is already installed.
-    public static func vocabularyCompanionForCustomTerms(
-        engineID: String,
-        catalog: ModelCatalog,
-        installedDownloadIDs: Set<String>
-    ) -> ModelDownload? {
-        guard engineID == ModelSelection.parakeetEngineID,
-              let baseID = catalog.engine(id: engineID)?.downloadId,
-              installedDownloadIDs.contains(baseID),
-              !installedDownloadIDs.contains(parakeetVocabularyDownloadID) else {
-            return nil
-        }
-        return catalog.download(id: parakeetVocabularyDownloadID)
-    }
-
     public static func totalBytes(_ downloads: [ModelDownload]) -> Int {
         downloads.reduce(0) { partial, download in
             let (total, overflow) = partial.addingReportingOverflow(download.bytes)

@@ -30,15 +30,19 @@ struct SpeechDictationPanel: View {
                     actionButton
                 }
 
-                Text("Apple Speech needs its system assets prepared once for the selected language. Parakeet and Whisper use only their downloaded local model files. Live words are available with Apple Speech; all backends delete temporary audio when transcription finishes.")
+                Text("Apple Speech checks whether its system assets are installed. Choose Prepare Apple Speech to install missing assets. Parakeet and Whisper are downloaded only when you explicitly choose them in Speech Models. Live words are available with Apple Speech; temporary audio is deleted after transcription.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 hotkeySettings
 
-                if dictation.isPreparingAssets || dictation.isTranscribing {
-                    ProgressView(dictation.isPreparingAssets ? "Preparing Apple Speech…" : "Transcribing locally…")
+                if dictation.isCheckingAssets {
+                    ProgressView("Checking Apple Speech assets…")
+                } else if dictation.isPreparingAssets {
+                    ProgressView("Preparing Apple Speech assets…")
+                } else if dictation.isTranscribing {
+                    ProgressView("Transcribing locally…")
                 }
 
                 if !dictation.transcript.isEmpty {
@@ -128,8 +132,8 @@ struct SpeechDictationPanel: View {
                         }
                         .buttonStyle(.bordered)
                     } else {
-                        Button("Open Accessibility Settings") {
-                            runtime.hotkey.openAccessibilitySettings()
+                        Button("Fix Accessibility Permission") {
+                            runtime.hotkey.requestEnable()
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -178,8 +182,9 @@ struct SpeechDictationPanel: View {
 
                 Text(runtime.hotkey.statusMessage)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(runtime.hotkey.hasAccessibilityPermission ? Color.gray : Color.orange)
                     .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
 
                 Toggle("Show live words in the recording overlay", isOn: $showLiveWords)
                     .font(.caption)
@@ -215,10 +220,17 @@ struct SpeechDictationPanel: View {
                         )
                     }
                 } label: {
-                    Label("Prepare Apple Speech", systemImage: "arrow.down.circle")
+                    Label(
+                        dictation.isCheckingAssets
+                            ? "Checking Apple Speech…"
+                            : dictation.isPreparingAssets
+                                ? "Preparing Apple Speech…"
+                                : "Prepare Apple Speech",
+                        systemImage: dictation.isCheckingAssets ? "magnifyingglass" : "arrow.down.circle"
+                    )
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(dictation.isPreparingAssets || dictation.isTranscribing)
+                .disabled(dictation.isCheckingAssets || dictation.isPreparingAssets || dictation.isTranscribing)
             } else {
                 Button {
                     Task { await runtime.startRecording() }
@@ -258,6 +270,8 @@ struct SpeechDictationPanel: View {
     }
 
     private var statusTitle: String {
+        if dictation.isCheckingAssets { return "Checking Apple Speech assets" }
+        if dictation.isPreparingAssets { return "Preparing Apple Speech assets" }
         if dictation.isRecording { return "Listening" }
         if dictation.isTranscribing { return "Finishing transcription" }
         if canStartRecording { return "Ready" }

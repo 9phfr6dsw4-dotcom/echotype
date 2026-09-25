@@ -43,8 +43,8 @@ iconutil -c icns "$ICONSET_DIR" -o "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 codesign --force --deep --sign - "$APP_BUNDLE"
 codesign --verify --deep --strict "$APP_BUNDLE"
 plutil -lint "$APP_BUNDLE/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx '0.1.2'
-/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx '3'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx '0.1.3'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx '4'
 
 mkdir -p "$VERIFY_DIR"
 ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ZIP_PATH"
@@ -52,8 +52,8 @@ ditto -x -k "$ZIP_PATH" "$VERIFY_DIR"
 EXTRACTED_APP="$VERIFY_DIR/${APP_NAME}.app"
 test -x "$EXTRACTED_APP/Contents/MacOS/EchoTypeApp"
 plutil -lint "$EXTRACTED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$EXTRACTED_APP/Contents/Info.plist" | grep -Fx '0.1.2'
-/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$EXTRACTED_APP/Contents/Info.plist" | grep -Fx '3'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$EXTRACTED_APP/Contents/Info.plist" | grep -Fx '0.1.3'
+/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$EXTRACTED_APP/Contents/Info.plist" | grep -Fx '4'
 codesign --verify --deep --strict "$EXTRACTED_APP"
 test -n "$(find "$EXTRACTED_APP/Contents/Resources" -maxdepth 1 -type d -name '*.bundle' -print -quit)"
 (

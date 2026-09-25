@@ -102,7 +102,7 @@ final class ModelLibraryViewModel {
             return "Download failed: \(parakeetVocabularyErrorMessage)"
         }
         if isParakeetInstalled {
-            return "Not installed. It will download automatically when you add a custom vocabulary term."
+            return "Not installed. Download it explicitly here or remove and reinstall Parakeet with the add-on."
         }
         return "Included with the next Parakeet download."
     }
@@ -139,14 +139,9 @@ final class ModelLibraryViewModel {
         }
     }
 
-    func ensureParakeetVocabularyCompanionForCustomTerms() async {
-        guard let catalog,
-              let companion = ModelDownloadPlan.vocabularyCompanionForCustomTerms(
-                engineID: ModelSelection.parakeetEngineID,
-                catalog: catalog,
-                installedDownloadIDs: installedDownloadIDs
-              ) else { return }
-        await download(downloadID: companion.id)
+    func downloadParakeetVocabularyCompanion() async {
+        guard isParakeetInstalled, !isParakeetVocabularyInstalled else { return }
+        await download(downloadID: Self.parakeetVocabularyDownloadID)
     }
 
     func download(downloadID: String) async {

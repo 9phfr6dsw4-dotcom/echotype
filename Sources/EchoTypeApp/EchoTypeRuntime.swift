@@ -30,8 +30,8 @@ final class EchoTypeRuntime {
 
     @ObservationIgnored private let overlayWindow: RecordingOverlayWindowController
     @ObservationIgnored private var dismissOverlayTask: Task<Void, Never>?
-    @ObservationIgnored private var capturedInsertionTarget: CapturedInsertionTarget?
     @ObservationIgnored private var workspaceActivationObserver: NSObjectProtocol?
+    @ObservationIgnored private var recordingStartGate = RecordingStartGate()
     @ObservationIgnored private var isDeliveringTranscript = false
     @ObservationIgnored private var recordingStartedAt: Date?
     @ObservationIgnored private var recordingEngineID: String?
@@ -74,13 +74,11 @@ final class EchoTypeRuntime {
             }
         }
         hotkey.onStartRecording = { [weak self] in
-            Task { @MainActor [weak self] in
-                await self?.startRecording()
-            }
+            self?.startHotkeyRecording()
         }
         hotkey.onStopRecording = { [weak self] in
             Task { @MainActor [weak self] in
-                await self?.stopAndDeliverRecording()
+                await self?.stopOrCancelHotkeyRecording()
             }
         }
         workspaceActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -90,15 +88,32 @@ final class EchoTypeRuntime {
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                self.hotkey.refreshPermission()
                 self.textInsertion.cancelCorrectionObservationIfTargetIsInvalid()
                 guard self.dictation.isRecording,
                       self.textInsertion.isFrontmostAppExcluded() else { return }
                 await self.discardRecordingInExcludedApp()
             }
         }
+        hotkey.refreshPermission()
+    }
+
+    private func startHotkeyRecording() {
+        guard let startToken = recordingStartGate.begin() else { return }
+        Task { @MainActor [weak self] in
+            await self?.startRecording(startToken: startToken)
+        }
     }
 
     func startRecording() async {
+        guard let startToken = recordingStartGate.begin() else { return }
+        await startRecording(startToken: startToken)
+    }
+
+    private func startRecording(startToken: UInt64) async {
+        defer { recordingStartGate.finish(startToken) }
+        guard recordingStartGate.isCurrent(startToken) else { return }
+
         guard !textInsertion.isFrontmostAppExcluded() else {
             dictation.errorMessage = "Dictation is disabled while a password manager is frontmost."
             return
@@ -119,9 +134,14 @@ final class EchoTypeRuntime {
         }
         let modelDirectory = modelLibrary.installedModelDirectory(for: engineID)
         let languageIdentifier = preferredTranscriptionLanguageIdentifier
-        if backend == .appleSpeech, !dictation.isAppleSpeechPrepared(for: languageIdentifier) {
-            dictation.errorMessage = "Prepare Apple Speech for the selected language in EchoType before recording."
-            return
+        if backend == .appleSpeech {
+            await dictation.checkAppleSpeechAssets(localeIdentifier: languageIdentifier)
+            guard recordingStartGate.isCurrent(startToken) else { return }
+            guard dictation.isAppleSpeechPrepared(for: languageIdentifier) else {
+                dictation.errorMessage = dictation.errorMessage
+                    ?? "Apple Speech assets aren't installed for this language yet. Choose Prepare Apple Speech in the Dictation panel, then use the hotkey again."
+                return
+            }
         }
         if backend != .appleSpeech, modelDirectory == nil {
             dictation.errorMessage = "The selected local model is not installed or failed verification. Reinstall it from Speech Models."
@@ -129,7 +149,6 @@ final class EchoTypeRuntime {
         }
         dismissOverlayTask?.cancel()
         deliveryMessage = nil
-        capturedInsertionTarget = textInsertion.captureTarget()
         let vocabularyTerms = TranscriptionVocabulary.terms(
             customTerms: customVocabulary.store.terms.map(\.term),
             learnedTerms: localLearning.store.learnedTerms
@@ -145,21 +164,46 @@ final class EchoTypeRuntime {
                 )
                 : nil
         )
+        guard recordingStartGate.isCurrent(startToken) else {
+            if dictation.isRecording {
+                await dictation.cancelAndDiscardRecording()
+                overlayModel.phase = .idle
+                overlayWindow.hide()
+                deliveryMessage = "Dictation start was canceled before audio setup finished."
+            }
+            return
+        }
         if dictation.isRecording {
             recordingStartedAt = Date()
             recordingEngineID = engineID
             recordingAudioOptions.startRecording()
             recordingFeedback.recordingStarted()
-        } else {
-            capturedInsertionTarget = nil
         }
+    }
+
+    private func cancelPendingRecordingStart() async -> Bool {
+        guard recordingStartGate.cancelPending() else { return false }
+        if dictation.isRecording {
+            await dictation.cancelAndDiscardRecording()
+            overlayModel.phase = .idle
+            overlayWindow.hide()
+        }
+        deliveryMessage = "Dictation start canceled because the hotkey was released before setup finished."
+        return true
+    }
+
+    private func stopOrCancelHotkeyRecording() async {
+        if await cancelPendingRecordingStart() { return }
+        await stopAndDeliverRecording()
     }
 
     func toggleRecording() async {
         if dictation.isRecording {
+            if await cancelPendingRecordingStart() { return }
             await stopAndDeliverRecording()
             return
         }
+        if await cancelPendingRecordingStart() { return }
         guard !dictation.isTranscribing else { return }
         await startRecording()
     }
@@ -172,6 +216,7 @@ final class EchoTypeRuntime {
             recordingEngineID = nil
             return
         }
+        let insertionTargetAtStop = textInsertion.captureTarget()
         isDeliveringTranscript = true
         overlayModel.phase = .finishing
         overlayWindow.show()
@@ -196,19 +241,17 @@ final class EchoTypeRuntime {
         recordingEngineID = nil
         guard !dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             deliveryMessage = dictation.errorMessage ?? "No speech was recognized; nothing was inserted."
-            capturedInsertionTarget = nil
             isDeliveringTranscript = false
             synchronizeOverlay(with: dictation)
             return
         }
         let outcome = await textInsertion.deliver(
             dictation.transcript,
-            capturedTarget: capturedInsertionTarget,
+            capturedTarget: insertionTargetAtStop,
             copyToClipboard: UserDefaults.standard.bool(forKey: "EchoType.copyToClipboard"),
             autoSend: UserDefaults.standard.bool(forKey: "EchoType.autoSend")
         )
         deliveryMessage = Self.message(for: outcome)
-        capturedInsertionTarget = nil
         isDeliveringTranscript = false
         synchronizeOverlay(with: dictation)
     }
@@ -217,7 +260,6 @@ final class EchoTypeRuntime {
         recordingAudioOptions.stopRecording()
         recordingFeedback.recordingStopped()
         await dictation.cancelAndDiscardRecording()
-        capturedInsertionTarget = nil
         deliveryMessage = "Recording discarded because a password manager became active."
         overlayModel.phase = .idle
         overlayWindow.hide()
@@ -252,13 +294,13 @@ final class EchoTypeRuntime {
     private static func message(for outcome: TextInsertionService.Outcome) -> String {
         switch outcome {
         case .inserted:
-            "Inserted into the same text field where dictation started."
+            "Inserted into the supported text field that was focused when you stopped dictation."
         case .insertedAndSubmitted:
             "Inserted and sent with Return."
         case .copyOnly(.targetUnavailable):
-            "Not pasted: EchoType could not verify the original text field. Use Copy in the transcript."
+            "Not pasted: EchoType could not verify the text field focused when dictation stopped. Use Copy in the transcript."
         case .copyOnly(.targetChanged):
-            "Not pasted: the app or focused text field changed during dictation. Use Copy in the transcript."
+            "Not pasted: the app or focused text field changed after dictation stopped. Use Copy in the transcript."
         case .copyOnly(.excludedApplication):
             "Not pasted in an excluded password manager."
         case .copyOnly(.secureField):

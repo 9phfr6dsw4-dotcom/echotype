@@ -13,6 +13,19 @@ private enum GlobalHotkeyInputEvent: Sendable {
     case flagsChanged(keyCode: UInt16, modifierFlags: UInt)
     case keyDown(keyCode: UInt16, modifierFlags: UInt, isRepeat: Bool)
     case keyUp(keyCode: UInt16)
+
+    var diagnosticLabel: String {
+        switch self {
+        case let .flagsChanged(keyCode, _): "flagsChanged keyCode \(keyCode)"
+        case let .keyDown(keyCode, _, isRepeat):
+            if isRepeat {
+                "keyDown keyCode \(keyCode) repeat"
+            } else {
+                "keyDown keyCode \(keyCode)"
+            }
+        case let .keyUp(keyCode): "keyUp keyCode \(keyCode)"
+        }
+    }
 }
 
 @MainActor
@@ -20,7 +33,8 @@ private enum GlobalHotkeyInputEvent: Sendable {
 final class GlobalHotkeyController {
     private(set) var isEnabled = false
     private(set) var hasAccessibilityPermission = AXIsProcessTrusted()
-    private(set) var statusMessage = "Enable the global hotkey to dictate from any app."
+    private(set) var statusMessage = "Global hotkey has not been enabled yet."
+    private(set) var receivedKeyboardEventCount = 0
     private(set) var selectedKeyCode: UInt16
     private(set) var selectedHotkey: GlobalHotkeySelection
     private(set) var backupShortcut: KeyboardShortcutDescriptor?
@@ -40,6 +54,8 @@ final class GlobalHotkeyController {
     @ObservationIgnored private var recognizer = ModifierTapRecognizer()
     @ObservationIgnored private var shortcutRecognizer: KeyboardShortcutRecognizer?
     @ObservationIgnored private var isHoldRecordingActive = false
+    @ObservationIgnored private var lastKeyboardEventDescription: String?
+    @ObservationIgnored private var lastRecognizedAction: String?
     @ObservationIgnored private let defaults: UserDefaults
 
     private static let keyCodeDefaultsKey = "EchoType.globalHotkeyKeyCode"
@@ -90,10 +106,28 @@ final class GlobalHotkeyController {
 
     func refreshPermission() {
         hasAccessibilityPermission = AXIsProcessTrusted()
-        if !hasAccessibilityPermission {
-            statusMessage = "Allow EchoType in System Settings → Privacy & Security → Accessibility."
-        } else if !isEnabled {
-            statusMessage = "Accessibility is ready. Enable the hotkey to listen for modifier taps."
+        guard hasAccessibilityPermission else {
+            if GlobalHotkeyStatusPolicy.shouldStopHoldRecording(
+                accessibilityGranted: hasAccessibilityPermission,
+                holdRecordingActive: isHoldRecordingActive
+            ) {
+                stopActiveHoldIfNeeded()
+            }
+            removeMonitors()
+            isEnabled = false
+            resetRecognizers()
+            refreshStatusMessage()
+            return
+        }
+
+        let previouslyEnabled = GlobalHotkeyStatusPolicy.storedEnabledPreference(in: defaults)
+        if GlobalHotkeyStatusPolicy.shouldActivateListener(
+            accessibilityGranted: hasAccessibilityPermission,
+            previouslyEnabled: previouslyEnabled
+        ), !isEnabled {
+            installMonitors()
+        } else {
+            refreshStatusMessage()
         }
     }
 
@@ -105,6 +139,15 @@ final class GlobalHotkeyController {
         }
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    /// Saves the user's opt-in before prompting for permission, then restores monitoring on return/next launch.
+    func requestEnable() {
+        GlobalHotkeyStatusPolicy.setEnabledPreference(true, in: defaults)
+        refreshPermission()
+        if !hasAccessibilityPermission {
+            openAccessibilitySettings()
+        }
     }
 
     func chooseKey(keyCode: UInt16) {
@@ -155,9 +198,15 @@ final class GlobalHotkeyController {
     }
 
     func enable() {
+        GlobalHotkeyStatusPolicy.setEnabledPreference(true, in: defaults)
         refreshPermission()
-        guard hasAccessibilityPermission else { return }
-        guard !isEnabled else { return }
+    }
+
+    private func installMonitors() {
+        guard hasAccessibilityPermission, !isEnabled else { return }
+        receivedKeyboardEventCount = 0
+        lastKeyboardEventDescription = nil
+        lastRecognizedAction = nil
 
         let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .keyUp]
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
@@ -177,7 +226,7 @@ final class GlobalHotkeyController {
                 return
             }
             Task { @MainActor [weak self] in
-                self?.handle(input)
+                self?.handle(input, source: "another app")
             }
         }
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
@@ -197,46 +246,60 @@ final class GlobalHotkeyController {
                 return event
             }
             Task { @MainActor [weak self] in
-                self?.handle(input)
+                self?.handle(input, source: "EchoType")
             }
             return event
         }
 
-        guard globalMonitor != nil || localMonitor != nil else {
-            statusMessage = "macOS did not allow the keyboard monitor to start. Check Accessibility permission."
+        guard globalMonitor != nil else {
+            removeMonitors()
+            isEnabled = false
+            lastKeyboardEventDescription = "Global keyboard listener registration failed; choose Enable Hotkey to retry."
+            refreshStatusMessage()
             return
         }
         isEnabled = true
-        let backupMessage = backupShortcut.map { " Backup \($0.displayLabel ?? "key code \($0.keyCode)") is also enabled." } ?? ""
-        switch selectedHotkey {
-        case .modifierKey:
-            statusMessage = selectedMode == .tapToToggle
-                ? "Listening for a bare \(selectedKeyName) tap. Key combinations such as Control-C are ignored.\(backupMessage)"
-                : "Hold \(selectedKeyName) to dictate; release it to finish. Modifier chords are ignored.\(backupMessage)"
-        case .shortcut:
-            statusMessage = selectedMode == .tapToToggle
-                ? "Listening for \(selectedKeyName) with its exact modifier chord. Other combinations are ignored.\(backupMessage)"
-                : "Hold \(selectedKeyName) with its exact modifier chord to dictate; release it to finish. Other combinations are ignored.\(backupMessage)"
-        }
+        refreshStatusMessage()
     }
 
     func disable() {
+        GlobalHotkeyStatusPolicy.setEnabledPreference(false, in: defaults)
+        removeMonitors()
+        isEnabled = false
+        stopActiveHoldIfNeeded()
+        resetRecognizers()
+        lastRecognizedAction = nil
+        refreshStatusMessage()
+    }
+
+    private func removeMonitors() {
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
         globalMonitor = nil
         localMonitor = nil
-        isEnabled = false
-        stopActiveHoldIfNeeded()
-        resetRecognizers()
-        statusMessage = "Global hotkey is off."
     }
 
-    private func handle(_ event: GlobalHotkeyInputEvent) {
+    private func refreshStatusMessage() {
+        statusMessage = GlobalHotkeyStatusPolicy.message(
+            accessibilityGranted: hasAccessibilityPermission,
+            hotkeyEnabledPreference: GlobalHotkeyStatusPolicy.storedEnabledPreference(in: defaults) ?? true,
+            globalMonitorInstalled: globalMonitor != nil,
+            receivedEventCount: receivedKeyboardEventCount,
+            configuredHotkey: "\(selectedKeyName) (\(selectedMode == .tapToToggle ? "tap to toggle" : "hold to talk"))",
+            lastEventDescription: lastKeyboardEventDescription,
+            lastRecognizedAction: lastRecognizedAction
+        )
+    }
+
+    private func handle(_ event: GlobalHotkeyInputEvent, source: String) {
         guard isEnabled else { return }
+        receivedKeyboardEventCount += 1
+        lastKeyboardEventDescription = "\(event.diagnosticLabel) from \(source)"
+        lastRecognizedAction = nil
         switch event {
         case let .flagsChanged(keyCode, modifierFlags):
             guard case let .modifierKey(selectedKeyCode) = selectedHotkey,
-                  keyCode == selectedKeyCode else { return }
+                  keyCode == selectedKeyCode else { break }
             let flags = NSEvent.ModifierFlags(rawValue: modifierFlags).intersection(.deviceIndependentFlagsMask)
             let targetModifier = Self.modifierFlag(for: selectedKeyCode)
             let hasOtherModifiers = !flags.subtracting(targetModifier).intersection(Self.relevantModifiers).isEmpty
@@ -245,7 +308,7 @@ final class GlobalHotkeyController {
 
         case let .keyDown(keyCode, modifierFlags, isRepeat):
             dispatch(recognizer.consume(.otherKeyDown))
-            guard var shortcutRecognizer else { return }
+            guard var shortcutRecognizer else { break }
             let flags = Self.shortcutModifierFlags(
                 from: NSEvent.ModifierFlags(rawValue: modifierFlags).intersection(.deviceIndependentFlagsMask)
             )
@@ -254,11 +317,12 @@ final class GlobalHotkeyController {
             dispatch(action)
 
         case let .keyUp(keyCode):
-            guard var shortcutRecognizer else { return }
+            guard var shortcutRecognizer else { break }
             let action = shortcutRecognizer.consume(.keyUp(keyCode: keyCode))
             self.shortcutRecognizer = shortcutRecognizer
             dispatch(action)
         }
+        refreshStatusMessage()
     }
 
     private func resetRecognizers() {
@@ -279,6 +343,7 @@ final class GlobalHotkeyController {
                 mode: selectedMode
             )
         }
+        refreshStatusMessage()
     }
 
     private func stopActiveHoldIfNeeded() {
@@ -290,16 +355,20 @@ final class GlobalHotkeyController {
     private func dispatch(_ action: ModifierHotkeyAction?) {
         switch action {
         case .toggleRecording:
+            lastRecognizedAction = "toggle dictation"
             onToggleRecording?()
         case .startRecording:
+            lastRecognizedAction = "start dictation"
             isHoldRecordingActive = true
             onStartRecording?()
         case .stopRecording:
+            lastRecognizedAction = "stop dictation"
             isHoldRecordingActive = false
             onStopRecording?()
         case nil:
             break
         }
+        refreshStatusMessage()
     }
 
     private static func decodeShortcut(_ data: Data?) -> KeyboardShortcutDescriptor? {

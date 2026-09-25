@@ -343,8 +343,11 @@ struct EchoTypeSettingsView: View {
             }
 
             if !isInstalled, !isDownloading, parakeetInstalled {
-                Button("Retry vocabulary add-on download") {
-                    Task { await modelLibrary.ensureParakeetVocabularyCompanionForCustomTerms() }
+                let label = modelLibrary.parakeetVocabularyErrorMessage == nil
+                    ? "Download optional vocabulary add-on (2.37 GB)"
+                    : "Retry vocabulary add-on download"
+                Button(label) {
+                    Task { await modelLibrary.downloadParakeetVocabularyCompanion() }
                 }
                 .buttonStyle(.bordered)
             }
@@ -362,7 +365,7 @@ struct EchoTypeSettingsView: View {
     private var customVocabularySettings: some View {
         GroupBox("Custom vocabulary") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Add names and unusual words to bias supported local speech engines. Apple Speech uses up to 100 contextual phrases; Whisper uses decoder prompt tokens. Parakeet's optional 2.37 GB CTC companion is included in an explicit Parakeet download (the combined size is shown first), or downloaded when you add a custom term if Parakeet is already installed. Missing or failed companion downloads disable only custom-vocabulary rescoring; base Parakeet transcripts continue.")
+                Text("Add names and unusual words to bias supported local speech engines. Apple Speech uses up to 100 contextual phrases; Whisper uses decoder prompt tokens. Parakeet's optional 2.37 GB CTC companion adds contextual rescoring. It is included when you explicitly download Parakeet with the combined size shown first; if Parakeet is already installed, use the separate Download optional vocabulary add-on button here. Adding or editing a term never starts a download. Missing or failed companion downloads disable only custom-vocabulary rescoring; base Parakeet transcripts continue.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -545,7 +548,6 @@ struct EchoTypeSettingsView: View {
         do {
             _ = try vocabulary.addTerm(newVocabularyTerm)
             newVocabularyTerm = ""
-            Task { await runtime.modelLibrary.ensureParakeetVocabularyCompanionForCustomTerms() }
         } catch {
             // The view model exposes a local, user-readable error message.
         }
@@ -563,7 +565,6 @@ struct EchoTypeSettingsView: View {
         do {
             _ = try vocabulary.editTerm(id: term.id, to: draft)
             vocabularyDrafts.removeValue(forKey: term.id)
-            Task { await runtime.modelLibrary.ensureParakeetVocabularyCompanionForCustomTerms() }
         } catch {
             // The view model exposes a local, user-readable error message.
         }

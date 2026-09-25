@@ -8,6 +8,7 @@ import Speech
 @Observable
 final class SpeechDictationViewModel {
     private(set) var isPreparingAssets = false
+    private(set) var isCheckingAssets = false
     private(set) var assetsPrepared = false
     private(set) var isRecording = false
     private(set) var isTranscribing = false
@@ -17,7 +18,12 @@ final class SpeechDictationViewModel {
 
     @ObservationIgnored private let transcriber = AppleSpeechTranscriber()
     @ObservationIgnored private let microphoneSettings: MicrophoneSettingsViewModel
+    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var preparedLocaleIdentifier: String?
+    @ObservationIgnored private var assetStatusCheckTask: Task<Void, Never>?
+    @ObservationIgnored private var assetStatusCheckTaskLocale: String?
+    @ObservationIgnored private var assetInstallationTask: Task<Void, Never>?
+    @ObservationIgnored private var assetInstallationTaskLocale: String?
     @ObservationIgnored private var recordingBackend: TranscriptionBackend?
     @ObservationIgnored private var recordingModelDirectory: URL?
     @ObservationIgnored private var recordingCtcVocabularyDirectory: URL?
@@ -33,28 +39,124 @@ final class SpeechDictationViewModel {
     @ObservationIgnored private var liveTranscript = LiveTranscriptText()
     @ObservationIgnored var onChange: ((SpeechDictationViewModel) -> Void)?
 
-    init(microphoneSettings: MicrophoneSettingsViewModel) {
+    static let preparedSpeechLocaleDefaultsKey = "EchoType.preparedSpeechLocale"
+
+    init(microphoneSettings: MicrophoneSettingsViewModel, defaults: UserDefaults = .standard) {
         self.microphoneSettings = microphoneSettings
+        self.defaults = defaults
+        preparedLocaleIdentifier = defaults.string(forKey: Self.preparedSpeechLocaleDefaultsKey)
         Self.removeInterruptedRecordings()
     }
 
     func isAppleSpeechPrepared(for localeIdentifier: String) -> Bool {
         assetsPrepared && PreparedSpeechLocalePolicy.isPrepared(
             preparedIdentifier: preparedLocaleIdentifier,
-            requestedIdentifier: localeIdentifier
+            requestedIdentifier: localeIdentifier,
+            assetsInstalled: assetsPrepared
         )
     }
 
     func prepareAppleSpeech(localeIdentifier: String = Locale.current.identifier) async {
-        guard !isPreparingAssets, !isAppleSpeechPrepared(for: localeIdentifier) else { return }
+        await checkAppleSpeechAssets(localeIdentifier: localeIdentifier)
+        guard !isAppleSpeechPrepared(for: localeIdentifier), !isPreparingAssets else { return }
+
+        if let currentTask = assetInstallationTask {
+            let currentLocale = assetInstallationTaskLocale
+            await currentTask.value
+            if currentLocale == localeIdentifier { return }
+        }
+
         isPreparingAssets = true
         errorMessage = nil
-        defer { isPreparingAssets = false }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.installAppleSpeechAssets(localeIdentifier: localeIdentifier)
+        }
+        assetInstallationTaskLocale = localeIdentifier
+        assetInstallationTask = task
+        await task.value
+    }
+
+    private func installAppleSpeechAssets(localeIdentifier: String) async {
+        defer {
+            isPreparingAssets = false
+            assetInstallationTask = nil
+            assetInstallationTaskLocale = nil
+        }
+        do {
+            let installedLocale = try await transcriber.prepare(localeIdentifier: localeIdentifier)
+            guard PreparedSpeechLocalePolicy.isPrepared(
+                preparedIdentifier: installedLocale,
+                requestedIdentifier: localeIdentifier,
+                assetsInstalled: true
+            ) else {
+                throw AppleSpeechTranscriber.TranscriptionError.assetsNotInstalled(localeIdentifier)
+            }
+            preparedLocaleIdentifier = installedLocale
+            assetsPrepared = true
+            defaults.set(installedLocale, forKey: Self.preparedSpeechLocaleDefaultsKey)
+        } catch {
+            preparedLocaleIdentifier = nil
+            assetsPrepared = false
+            defaults.removeObject(forKey: Self.preparedSpeechLocaleDefaultsKey)
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Checks whether Apple Speech assets are installed without initiating downloads.
+    func checkAppleSpeechAssets(localeIdentifier: String) async {
+        if let currentTask = assetInstallationTask {
+            let currentLocale = assetInstallationTaskLocale
+            await currentTask.value
+            if currentLocale == localeIdentifier { return }
+        }
+        if let currentTask = assetStatusCheckTask {
+            let currentLocale = assetStatusCheckTaskLocale
+            await currentTask.value
+            if currentLocale == localeIdentifier { return }
+            await checkAppleSpeechAssets(localeIdentifier: localeIdentifier)
+            return
+        }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.checkAppleSpeechAssetStatus(localeIdentifier: localeIdentifier)
+        }
+        assetStatusCheckTaskLocale = localeIdentifier
+        assetStatusCheckTask = task
+        await task.value
+    }
+
+    private func checkAppleSpeechAssetStatus(localeIdentifier: String) async {
+        isCheckingAssets = true
+        errorMessage = nil
+        defer {
+            isCheckingAssets = false
+            assetStatusCheckTask = nil
+            assetStatusCheckTaskLocale = nil
+        }
 
         do {
-            preparedLocaleIdentifier = try await transcriber.prepare(localeIdentifier: localeIdentifier)
-            assetsPrepared = true
+            if let installedLocale = try await transcriber.installedLocaleIdentifier(
+                localeIdentifier: localeIdentifier
+            ), PreparedSpeechLocalePolicy.isPrepared(
+                preparedIdentifier: installedLocale,
+                requestedIdentifier: localeIdentifier,
+                assetsInstalled: true
+            ) {
+                preparedLocaleIdentifier = installedLocale
+                assetsPrepared = true
+                defaults.set(installedLocale, forKey: Self.preparedSpeechLocaleDefaultsKey)
+                return
+            }
+
+            preparedLocaleIdentifier = nil
+            assetsPrepared = false
+            defaults.removeObject(forKey: Self.preparedSpeechLocaleDefaultsKey)
         } catch {
+            preparedLocaleIdentifier = nil
+            assetsPrepared = false
+            defaults.removeObject(forKey: Self.preparedSpeechLocaleDefaultsKey)
             errorMessage = error.localizedDescription
         }
     }
@@ -95,7 +197,7 @@ final class SpeechDictationViewModel {
     private func startAppleSpeechRecording(languageIdentifier: String) async {
         guard !isRecording, !isTranscribing else { return }
         guard isAppleSpeechPrepared(for: languageIdentifier) else {
-            errorMessage = "Prepare Apple Speech for the selected language in EchoType before recording."
+            errorMessage = "Apple Speech assets for this language aren't installed yet. Choose Prepare Apple Speech in the Dictation panel, then use the hotkey again."
             return
         }
         errorMessage = nil
@@ -109,7 +211,7 @@ final class SpeechDictationViewModel {
               let locale = await DictationTranscriber.supportedLocale(
                 equivalentTo: Locale(identifier: preparedLocaleIdentifier)
               ) else {
-            errorMessage = "The prepared speech language is no longer available. Prepare Apple Speech again."
+            errorMessage = "Apple Speech no longer reports installed assets for this language. Check the Dictation panel and choose Prepare Apple Speech, then use the hotkey again."
             return
         }
 
@@ -323,7 +425,7 @@ final class SpeechDictationViewModel {
             case .appleSpeech:
                 guard let preparedLocaleIdentifier else {
                     transcript = liveText
-                    errorMessage = "Prepare Apple Speech before recording."
+                    errorMessage = "Apple Speech assets aren't installed for this language. Choose Prepare Apple Speech in the Dictation panel, then use the hotkey again."
                     return
                 }
                 let finalTranscript = try await transcriber.transcribe(

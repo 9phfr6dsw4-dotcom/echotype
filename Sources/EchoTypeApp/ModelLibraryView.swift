@@ -40,7 +40,7 @@ struct ModelLibraryView: View {
                     ProgressView("Loading model catalog…")
                 }
 
-                Label("External models download only after you request a model or add a custom term that needs the Parakeet companion. Apple speech assets are prepared only when you choose Prepare. Temporary audio is deleted after transcription.", systemImage: "lock.shield")
+                Label("External models download only after you request them or explicitly request the optional Parakeet vocabulary add-on. Apple Speech checks whether system assets are installed; only an explicit Prepare action may install missing Apple assets. Temporary audio is deleted after transcription.", systemImage: "lock.shield")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -149,7 +149,7 @@ struct ModelLibraryView: View {
                         )
                     }
                 } else if engine.id == ModelSelection.appleSpeechEngineID {
-                    detailRow("Speech assets", "Managed by macOS; first use may download assets from Apple after you choose Prepare.")
+                    detailRow("Speech assets", "Managed by macOS; EchoType checks installation at launch. Choose Prepare Apple Speech to install missing assets.")
                 } else {
                     detailRow("Download", "No model download required")
                 }
@@ -218,7 +218,7 @@ struct ModelLibraryView: View {
 
         return GroupBox("Optional Parakeet custom vocabulary") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Uses the local CTC acoustic rescoring model to bias recognition toward dictionary and learned terms. It downloads with Parakeet or automatically the first time you add a custom term if Parakeet is already installed. Every file is checksum-verified.")
+                Text("Uses the local CTC acoustic rescoring model to bias recognition toward dictionary and learned terms. It downloads with a new Parakeet installation, or separately when you explicitly choose Download Now. Every file is checksum-verified.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

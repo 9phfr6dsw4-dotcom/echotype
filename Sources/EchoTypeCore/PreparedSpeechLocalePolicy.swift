@@ -5,9 +5,11 @@ import Foundation
 public enum PreparedSpeechLocalePolicy {
     public static func isPrepared(
         preparedIdentifier: String?,
-        requestedIdentifier: String
+        requestedIdentifier: String,
+        assetsInstalled: Bool
     ) -> Bool {
-        guard let preparedIdentifier,
+        guard assetsInstalled,
+              let preparedIdentifier,
               let prepared = components(in: preparedIdentifier),
               let requested = components(in: requestedIdentifier) else {
             return false
