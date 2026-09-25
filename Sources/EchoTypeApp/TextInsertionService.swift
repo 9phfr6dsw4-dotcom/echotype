@@ -528,11 +528,11 @@ final class TextInsertionService {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
               let value,
-              CFGetTypeID(value) == AXValueGetTypeID(),
-              let axValue = value as! AXValue,
-              AXValueGetType(axValue) == .cfRange else {
+              CFGetTypeID(value) == AXValueGetTypeID() else {
             return nil
         }
+        let axValue = value as! AXValue
+        guard AXValueGetType(axValue) == .cfRange else { return nil }
         var range = CFRange()
         guard AXValueGetValue(axValue, .cfRange, &range) else { return nil }
         return InsertedTextCorrectionRange(location: range.location, length: range.length)
