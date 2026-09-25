@@ -32,7 +32,7 @@ jobs:
         run: swift test
       - name: Build, package, and verify native app
         run: bash Scripts/package-app.sh
-      - name: Launch smoke test
+      - name: Launch packaged app from a clean location without .build
         run: bash Scripts/smoke-test.sh
       - uses: actions/upload-artifact@v4
         with:

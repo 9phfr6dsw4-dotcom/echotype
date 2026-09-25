@@ -3,7 +3,7 @@ import EchoTypeCore
 
 final class ModelSelectionTests: XCTestCase {
     func testInstalledParakeetBecomesDefaultWhenNoEngineWasChosen() throws {
-        let catalog = try ModelCatalog.bundled()
+        let catalog = try ModelCatalogTestSupport.catalog()
         let selection = ModelSelection(
             catalog: catalog,
             installedDownloadIDs: ["parakeet-v3"]
@@ -13,7 +13,7 @@ final class ModelSelectionTests: XCTestCase {
     }
 
     func testExplicitAppleSpeechPreferenceIsPreservedWhenParakeetIsInstalled() throws {
-        let catalog = try ModelCatalog.bundled()
+        let catalog = try ModelCatalogTestSupport.catalog()
         let selection = ModelSelection(
             catalog: catalog,
             preferredEngineID: ModelSelection.appleSpeechEngineID,

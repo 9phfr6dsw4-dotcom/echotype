@@ -18,6 +18,12 @@ install -m 755 ".build/release/EchoTypeApp" "$APP_BUNDLE/Contents/MacOS/EchoType
 cp "Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 
 resource_bundles=()
+EXPECTED_CORE_BUNDLE=".build/release/EchoType_EchoTypeCore.bundle"
+if [[ ! -s "$EXPECTED_CORE_BUNDLE/model-manifest.json" ]]; then
+    printf 'Required model catalog bundle is missing: %s\n' "$EXPECTED_CORE_BUNDLE" >&2
+    find -L .build/release -maxdepth 2 -print >&2
+    exit 1
+fi
 while IFS= read -r bundle_path; do
     resource_bundles+=("$bundle_path")
 done < <(find -L .build/release -maxdepth 2 -type d -name '*.bundle' -print)
@@ -29,6 +35,7 @@ fi
 for bundle_path in "${resource_bundles[@]}"; do
     cp -R "$bundle_path" "$APP_BUNDLE/Contents/Resources/"
 done
+test -s "$APP_BUNDLE/Contents/Resources/EchoType_EchoTypeCore.bundle/model-manifest.json"
 
 swift Scripts/create-app-icon.swift "$ICONSET_DIR"
 iconutil -c icns "$ICONSET_DIR" -o "$APP_BUNDLE/Contents/Resources/AppIcon.icns"

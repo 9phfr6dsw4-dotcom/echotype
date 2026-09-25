@@ -3,7 +3,7 @@ import XCTest
 
 final class ModelDownloadPlanTests: XCTestCase {
     func testFirstParakeetDownloadIncludesModelAndVocabularyCompanionInTotal() throws {
-        let catalog = try ModelCatalog.bundled()
+        let catalog = try ModelCatalogTestSupport.catalog()
         let downloads = ModelDownloadPlan.downloadsForExplicitInstall(
             engineID: ModelSelection.parakeetEngineID,
             catalog: catalog,
@@ -15,7 +15,7 @@ final class ModelDownloadPlanTests: XCTestCase {
     }
 
     func testParakeetDownloadDoesNotRedownloadAlreadyInstalledCompanion() throws {
-        let catalog = try ModelCatalog.bundled()
+        let catalog = try ModelCatalogTestSupport.catalog()
 
         let downloads = ModelDownloadPlan.downloadsForExplicitInstall(
             engineID: ModelSelection.parakeetEngineID,
@@ -27,7 +27,7 @@ final class ModelDownloadPlanTests: XCTestCase {
     }
 
     func testAddingCustomTermsRequestsCompanionOnlyWhenParakeetIsInstalled() throws {
-        let catalog = try ModelCatalog.bundled()
+        let catalog = try ModelCatalogTestSupport.catalog()
 
         XCTAssertNil(ModelDownloadPlan.vocabularyCompanionForCustomTerms(
             engineID: ModelSelection.parakeetEngineID,
@@ -45,7 +45,7 @@ final class ModelDownloadPlanTests: XCTestCase {
     }
 
     func testOtherEngineInstallPlanDoesNotIncludeParakeetCompanion() throws {
-        let catalog = try ModelCatalog.bundled()
+        let catalog = try ModelCatalogTestSupport.catalog()
 
         let downloads = ModelDownloadPlan.downloadsForExplicitInstall(
             engineID: "whisper-large-v3-turbo",

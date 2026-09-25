@@ -102,14 +102,53 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertTrue(url.path.contains(file.revision))
     }
 
-    func testBundledCatalogLoadsForThePackagedApp() throws {
-        let catalog = try ModelCatalog.bundled()
+    func testBundledCatalogLoadsFromPackagedAppResourcesDirectory() throws {
+        let resourceDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("EchoType-resource-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: resourceDirectory) }
+        let bundleDirectory = resourceDirectory.appendingPathComponent(
+            "EchoType_EchoTypeCore.bundle",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: bundleDirectory, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(
+            at: manifestURL(),
+            to: bundleDirectory.appendingPathComponent("model-manifest.json")
+        )
+
+        let catalog = try ModelCatalog.bundled(resourceDirectory: resourceDirectory)
 
         XCTAssertEqual(catalog.engines.map(\.id), ["apple-speech", "parakeet-v3", "whisper-large-v3-turbo"])
     }
 
+    func testBundledCatalogReportsMissingAppResourcesWithoutTrapping() throws {
+        let resourceDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("EchoType-empty-resource-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: resourceDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: resourceDirectory) }
+
+        XCTAssertThrowsError(try ModelCatalog.bundled(resourceDirectory: resourceDirectory)) { error in
+            XCTAssertEqual(error as? ModelCatalogError, .bundledResourcesMissing)
+        }
+    }
+
+    func testBundledCatalogReportsMissingManifestWithoutTrapping() throws {
+        let resourceDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("EchoType-empty-manifest-test-\(UUID().uuidString)", isDirectory: true)
+        let bundleDirectory = resourceDirectory.appendingPathComponent(
+            "EchoType_EchoTypeCore.bundle",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: bundleDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: resourceDirectory) }
+
+        XCTAssertThrowsError(try ModelCatalog.bundled(resourceDirectory: resourceDirectory)) { error in
+            XCTAssertEqual(error as? ModelCatalogError, .bundledManifestMissing)
+        }
+    }
+
     func testModelSelectionDefaultsToAppleAndRequiresAnInstalledDownload() throws {
-        let catalog = try ModelCatalog.bundled()
+        let catalog = try ModelCatalogTestSupport.catalog()
         var selection = ModelSelection(catalog: catalog)
 
         XCTAssertEqual(selection.engineID, "apple-speech")

@@ -1,10 +1,16 @@
 import Foundation
 
 public enum ModelCatalogError: Error, Equatable, LocalizedError, Sendable {
+    case bundledResourcesMissing
+    case bundledManifestMissing
     case invalidManifest(String)
 
     public var errorDescription: String? {
         switch self {
+        case .bundledResourcesMissing:
+            return "The EchoType model resource bundle is missing from the app. Reinstall EchoType from the official release."
+        case .bundledManifestMissing:
+            return "The model catalog file is missing from the EchoType app bundle. Reinstall EchoType from the official release."
         case .invalidManifest(let reason): return "Invalid model manifest: \(reason)"
         }
     }
@@ -92,11 +98,36 @@ public struct ModelCatalog: Sendable {
     public let engines: [ModelEngine]
     public let downloads: [ModelDownload]
 
+    private static let resourceBundleName = "EchoType_EchoTypeCore.bundle"
+
     public static func bundled() throws -> ModelCatalog {
-        guard let url = Bundle.module.url(forResource: "model-manifest", withExtension: "json") else {
-            throw ModelCatalogError.invalidManifest("bundled model-manifest.json is missing")
+        let resourceDirectories = [
+            Bundle.main.resourceURL,
+            Bundle.main.bundleURL,
+            Bundle.main.executableURL?.deletingLastPathComponent()
+        ].compactMap { $0 }
+        let fileManager = FileManager.default
+        guard let resourceDirectory = resourceDirectories.first(where: { directory in
+            let manifestURL = directory
+                .appendingPathComponent(resourceBundleName, isDirectory: true)
+                .appendingPathComponent("model-manifest.json")
+            return fileManager.fileExists(atPath: manifestURL.path)
+        }) else {
+            throw ModelCatalogError.bundledResourcesMissing
         }
-        return try ModelCatalog(data: Data(contentsOf: url))
+        return try bundled(resourceDirectory: resourceDirectory)
+    }
+
+    public static func bundled(resourceDirectory: URL) throws -> ModelCatalog {
+        let bundleDirectory = resourceDirectory.appendingPathComponent(resourceBundleName, isDirectory: true)
+        let manifestURL = bundleDirectory.appendingPathComponent("model-manifest.json")
+        guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+            if FileManager.default.fileExists(atPath: bundleDirectory.path) {
+                throw ModelCatalogError.bundledManifestMissing
+            }
+            throw ModelCatalogError.bundledResourcesMissing
+        }
+        return try ModelCatalog(data: Data(contentsOf: manifestURL))
     }
 
     public init(data: Data) throws {

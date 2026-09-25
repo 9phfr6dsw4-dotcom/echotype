@@ -3,7 +3,7 @@ import EchoTypeCore
 
 final class TranscriptionBackendTests: XCTestCase {
     private func catalog() throws -> ModelCatalog {
-        try ModelCatalog.bundled()
+        try ModelCatalogTestSupport.catalog()
     }
 
     func testAppleSpeechNeedsNoModelDownload() throws {
