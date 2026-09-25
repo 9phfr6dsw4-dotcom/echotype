@@ -346,7 +346,7 @@ final class SpeechDictationViewModel {
         do {
             let writer = try AudioFileWriter(url: url, settings: inputFormat.settings)
             let preview = previewEnabled
-                ? ParakeetPreviewAudioQueue(sampleRate: inputFormat.sampleRate) : nil
+                ? ParakeetPreviewAudioQueue() : nil
             let tapHandler = AudioTapHandlerFactory.make { buffer in
                 writer.write(buffer)
                 preview?.append(buffer)
@@ -433,6 +433,12 @@ final class SpeechDictationViewModel {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
         audioEngine = nil
+        if recordingBackend == .parakeetV3 {
+            // Give cancellation/recognizer cleanup a short head start before the
+            // independent batch manager loads the same installed model assets.
+            // Never await previewTask.value here: Core ML inference may not cancel promptly.
+            try? await Task.sleep(for: .milliseconds(200))
+        }
         let writeError = audioWriter?.errorMessage
         audioWriter = nil
         if saveAudio, writeError == nil {
