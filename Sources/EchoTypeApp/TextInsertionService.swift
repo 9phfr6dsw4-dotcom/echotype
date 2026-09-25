@@ -284,21 +284,23 @@ final class TextInsertionService {
         startCorrectionLifetimeTask(deadline: deadline)
     }
 
-    fileprivate func receiveCorrectionAXNotification(element: AXUIElement, notification: CFString) {
+    fileprivate func receiveCorrectionAXNotification(notificationName: String) {
         guard var session = correctionSession else { return }
         guard isCorrectionObservationOpen(session) else {
             stopCorrectionObservation()
             return
         }
-        guard CFEqual(element, session.target.focusedElement),
-              isCorrectionTargetValid(session.target) else {
+        guard isCorrectionTargetValid(session.target) else {
             stopCorrectionObservation()
             return
         }
 
-        if (notification as String) == (kAXSelectedTextChangedNotification as String) {
-            guard let selection = accessibilityRange(kAXSelectedTextRangeAttribute, of: element),
-                  let fieldCharacterCount = accessibilityCharacterCount(of: element) else {
+        if notificationName == (kAXSelectedTextChangedNotification as String) {
+            guard let selection = accessibilityRange(
+                    kAXSelectedTextRangeAttribute,
+                    of: session.target.focusedElement
+                  ),
+                  let fieldCharacterCount = accessibilityCharacterCount(of: session.target.focusedElement) else {
                 stopCorrectionObservation()
                 return
             }
@@ -333,7 +335,7 @@ final class TextInsertionService {
             return
         }
 
-        guard (notification as String) == (kAXValueChangedNotification as String),
+        guard notificationName == (kAXValueChangedNotification as String),
               let pendingSelection = session.pendingSelection else {
             return
         }
@@ -627,7 +629,8 @@ private func echoTypeCorrectionObserverCallback(
 ) {
     guard Thread.isMainThread, let refcon else { return }
     let service = Unmanaged<TextInsertionService>.fromOpaque(refcon).takeUnretainedValue()
+    let notificationName = notification as String
     MainActor.assumeIsolated {
-        service.receiveCorrectionAXNotification(element: element, notification: notification)
+        service.receiveCorrectionAXNotification(notificationName: notificationName)
     }
 }
