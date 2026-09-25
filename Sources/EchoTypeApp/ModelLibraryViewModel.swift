@@ -40,7 +40,6 @@ final class ModelLibraryViewModel {
             )
             self.selection = selection
             self.selectedEngineID = selection.engineID
-            defaults.set(selection.engineID, forKey: Self.selectedEngineDefaultsKey)
         } catch {
             self.startupError = error.localizedDescription
         }
@@ -86,6 +85,7 @@ final class ModelLibraryViewModel {
                 }
             }
             installedDownloadIDs.insert(downloadID)
+            refreshSelection()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -108,5 +108,16 @@ final class ModelLibraryViewModel {
         let supportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
         return supportDirectory.appendingPathComponent("EchoType/Models", isDirectory: true)
+    }
+
+    private func refreshSelection() {
+        guard let catalog else { return }
+        let updated = ModelSelection(
+            catalog: catalog,
+            preferredEngineID: defaults.string(forKey: Self.selectedEngineDefaultsKey),
+            installedDownloadIDs: installedDownloadIDs
+        )
+        selection = updated
+        selectedEngineID = updated.engineID
     }
 }
