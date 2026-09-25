@@ -20,7 +20,9 @@ final class SpeechDictationViewModel {
     @ObservationIgnored private var preparedLocaleIdentifier: String?
     @ObservationIgnored private var recordingBackend: TranscriptionBackend?
     @ObservationIgnored private var recordingModelDirectory: URL?
+    @ObservationIgnored private var recordingCtcVocabularyDirectory: URL?
     @ObservationIgnored private var recordingLanguageIdentifier: String?
+    @ObservationIgnored private var recordingVocabularyTerms: [String] = []
     @ObservationIgnored private var audioEngine: AVAudioEngine?
     @ObservationIgnored private var audioWriter: AudioFileWriter?
     @ObservationIgnored private var recordingURL: URL?
@@ -53,9 +55,12 @@ final class SpeechDictationViewModel {
     func startRecording(
         backend: TranscriptionBackend,
         modelDirectory: URL?,
-        languageIdentifier: String
+        languageIdentifier: String,
+        vocabularyTerms: [String] = [],
+        ctcVocabularyDirectory: URL? = nil
     ) async {
         completedRecordingAudioData = nil
+        recordingVocabularyTerms = vocabularyTerms
         switch backend {
         case .appleSpeech:
             await startAppleSpeechRecording()
@@ -72,6 +77,7 @@ final class SpeechDictationViewModel {
             if isRecording {
                 recordingBackend = backend
                 recordingModelDirectory = modelDirectory
+                recordingCtcVocabularyDirectory = ctcVocabularyDirectory
                 recordingLanguageIdentifier = languageIdentifier
             }
         case .unavailable(let engineID):
@@ -89,7 +95,7 @@ final class SpeechDictationViewModel {
         }
 
         guard let preparedLocaleIdentifier,
-              let locale = await SpeechTranscriber.supportedLocale(
+              let locale = await DictationTranscriber.supportedLocale(
                 equivalentTo: Locale(identifier: preparedLocaleIdentifier)
               ) else {
             errorMessage = "The prepared speech language is no longer available. Prepare Apple Speech again."
@@ -111,7 +117,7 @@ final class SpeechDictationViewModel {
             return
         }
 
-        let liveTranscriber = SpeechTranscriber(locale: locale, preset: .progressiveTranscription)
+        let liveTranscriber = DictationTranscriber(locale: locale, preset: .progressiveLongDictation)
         guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
             compatibleWith: [liveTranscriber],
             considering: inputFormat
@@ -148,6 +154,9 @@ final class SpeechDictationViewModel {
             let converter = try SpeechAudioBufferConverter(inputFormat: inputFormat, outputFormat: analyzerFormat)
             let bridge = AudioAnalyzerInputBridge(converter: converter, continuation: continuation)
 
+            if let context = AppleSpeechTranscriber.analysisContext(for: recordingVocabularyTerms) {
+                try await analyzer.setContext(context)
+            }
             try await analyzer.start(inputSequence: inputSequence)
             inputNode.installTap(onBus: 0, bufferSize: 2_048, format: inputFormat) { buffer, _ in
                 writer.write(buffer)
@@ -244,7 +253,9 @@ final class SpeechDictationViewModel {
             self.recordingURL = nil
             self.recordingBackend = nil
             self.recordingModelDirectory = nil
+            self.recordingCtcVocabularyDirectory = nil
             self.recordingLanguageIdentifier = nil
+            self.recordingVocabularyTerms = []
             self.isTranscribing = false
             self.onChange?(self)
         }
@@ -294,7 +305,8 @@ final class SpeechDictationViewModel {
                 }
                 let finalTranscript = try await transcriber.transcribe(
                     audioFileAt: recordingURL,
-                    localeIdentifier: preparedLocaleIdentifier
+                    localeIdentifier: preparedLocaleIdentifier,
+                    contextualPhrases: recordingVocabularyTerms
                 )
                 transcript = finalTranscript.isEmpty ? liveText : finalTranscript
             case .parakeetV3, .whisperLargeV3Turbo:
@@ -307,7 +319,9 @@ final class SpeechDictationViewModel {
                     backend: backend,
                     audioURL: recordingURL,
                     modelDirectory: recordingModelDirectory,
-                    languageIdentifier: languageIdentifier
+                    languageIdentifier: languageIdentifier,
+                    vocabularyTerms: recordingVocabularyTerms,
+                    ctcVocabularyDirectory: recordingCtcVocabularyDirectory
                 )
             case .unavailable(let engineID):
                 throw LocalModelTranscriber.TranscriptionError.unavailableBackend(engineID)
@@ -348,7 +362,9 @@ final class SpeechDictationViewModel {
         transcript = ""
         recordingBackend = nil
         recordingModelDirectory = nil
+        recordingCtcVocabularyDirectory = nil
         recordingLanguageIdentifier = nil
+        recordingVocabularyTerms = []
         onChange?(self)
     }
 

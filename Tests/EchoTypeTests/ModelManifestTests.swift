@@ -36,9 +36,9 @@ final class ModelManifestTests: XCTestCase {
             return (id, bytes)
         })
         XCTAssertEqual(totals["parakeet-v3"], 632_169_729)
-        XCTAssertEqual(totals["parakeet-v3-ctc-vocab"], 2_373_826_395)
+        XCTAssertEqual(totals["parakeet-ctc-0.6b-coreml"], 2_374_186_501)
         XCTAssertEqual(totals["whisper-large-v3-turbo"], 3_199_676_429)
-        XCTAssertEqual(downloads.first(where: { $0["id"] as? String == "parakeet-v3-ctc-vocab" })?["optional"] as? Bool, true)
+        XCTAssertEqual(downloads.first(where: { $0["id"] as? String == "parakeet-ctc-0.6b-coreml" })?["optional"] as? Bool, true)
     }
 
     func testEveryDownloadFileIsPinnedAndHasAValidSha256() throws {

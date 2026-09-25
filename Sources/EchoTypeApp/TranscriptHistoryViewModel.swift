@@ -104,6 +104,32 @@ final class TranscriptHistoryViewModel {
         refresh()
     }
 
+    func updateTranscript(_ record: TranscriptRecord, text: String) throws {
+        let cleanedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanedText.isEmpty else {
+            throw TranscriptHistoryEditError.emptyTranscript
+        }
+        guard records.contains(where: { $0.id == record.id }) else {
+            throw TranscriptHistoryEditError.recordNotFound
+        }
+        let updatedRecord = TranscriptRecord(
+            id: record.id,
+            text: cleanedText,
+            timestamp: record.timestamp,
+            duration: record.duration,
+            modelID: record.modelID
+        )
+        let store = makeStore()
+        try store.save(updatedRecord)
+        if let archiveDirectoryPath {
+            _ = try store.archiveMarkdown(
+                for: updatedRecord,
+                to: URL(fileURLWithPath: archiveDirectoryPath, isDirectory: true)
+            )
+        }
+        refresh()
+    }
+
     func reload() {
         refresh()
     }
@@ -148,5 +174,19 @@ final class TranscriptHistoryViewModel {
 
     private static func wordCount(in text: String) -> Int {
         text.split(whereSeparator: \.isWhitespace).count
+    }
+}
+
+private enum TranscriptHistoryEditError: LocalizedError {
+    case emptyTranscript
+    case recordNotFound
+
+    var errorDescription: String? {
+        switch self {
+        case .emptyTranscript:
+            "A saved transcript cannot be replaced with empty text."
+        case .recordNotFound:
+            "This transcript is no longer in EchoType history."
+        }
     }
 }

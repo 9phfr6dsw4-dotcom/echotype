@@ -123,6 +123,58 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: unrelatedURL), Data("leave this alone".utf8))
     }
 
+    func testClearAllAlsoRemovesOrphanedEchoTypeAudioButLeavesOtherFiles() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = TranscriptHistoryStore(
+            applicationSupportDirectory: root,
+            settings: TranscriptHistorySettings(saveAudio: true)
+        )
+        let record = makeRecord(text: "Indexed audio")
+        try store.save(record, audioData: Data([1, 2, 3]))
+
+        let ownedDirectory = root.appendingPathComponent(
+            TranscriptHistoryStore.storageDirectoryName,
+            isDirectory: true
+        )
+        let orphanID = UUID()
+        let orphanAudioURL = ownedDirectory.appendingPathComponent("\(orphanID.uuidString).audio")
+        try Data([4, 5, 6]).write(to: orphanAudioURL)
+        let unrelatedURL = ownedDirectory.appendingPathComponent("leave-me.txt")
+        try Data("unrelated".utf8).write(to: unrelatedURL)
+
+        try store.clearAll()
+
+        XCTAssertNil(try store.loadAudio(for: record.id))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphanAudioURL.path))
+        XCTAssertEqual(try Data(contentsOf: unrelatedURL), Data("unrelated".utf8))
+        XCTAssertTrue(try store.records().isEmpty)
+    }
+
+    func testSavingAnEditedTranscriptReplacesTextWithoutChangingRecordIdentityOrMetadata() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = TranscriptHistoryStore(applicationSupportDirectory: root)
+        let original = makeRecord(text: "Kubernets is useful.")
+        let corrected = TranscriptRecord(
+            id: original.id,
+            text: "Kubernetes is useful.",
+            timestamp: original.timestamp,
+            duration: original.duration,
+            modelID: original.modelID
+        )
+        try store.save(original)
+
+        try store.save(corrected)
+
+        XCTAssertEqual(try store.records(), [corrected])
+        XCTAssertEqual(try store.records().count, 1)
+        XCTAssertEqual(try store.records().first?.id, original.id)
+        XCTAssertEqual(try store.records().first?.timestamp, original.timestamp)
+        XCTAssertEqual(try store.records().first?.duration, original.duration)
+        XCTAssertEqual(try store.records().first?.modelID, original.modelID)
+    }
+
     func testMarkdownArchiveWritesTranscriptAndMetadataToExistingChosenDirectory() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

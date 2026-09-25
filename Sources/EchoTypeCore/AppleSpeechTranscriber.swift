@@ -29,28 +29,29 @@ public struct AppleSpeechTranscriber: Sendable {
         }
 
         let requestedLocale = Locale(identifier: localeIdentifier)
-        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
+        guard let locale = await DictationTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
             throw TranscriptionError.unsupportedLocale(localeIdentifier)
         }
 
-        let modules: [any SpeechModule] = [
-            SpeechTranscriber(locale: locale, preset: .progressiveTranscription),
-            SpeechTranscriber(locale: locale, preset: .transcription)
-        ]
-        if let request = try await AssetInventory.assetInstallationRequest(supporting: modules) {
+        let module = DictationTranscriber(locale: locale, preset: .progressiveLongDictation)
+        if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
             try await request.downloadAndInstall()
         }
         return locale.identifier
     }
 
     /// Transcribes a local audio file. This method does not request or download assets.
-    public func transcribe(audioFileAt url: URL, localeIdentifier: String) async throws -> String {
+    public func transcribe(
+        audioFileAt url: URL,
+        localeIdentifier: String,
+        contextualPhrases: [String] = []
+    ) async throws -> String {
         guard SpeechTranscriber.isAvailable else {
             throw TranscriptionError.unavailable
         }
 
         let requestedLocale = Locale(identifier: localeIdentifier)
-        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
+        guard let locale = await DictationTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
             throw TranscriptionError.unsupportedLocale(localeIdentifier)
         }
 
@@ -59,8 +60,11 @@ public struct AppleSpeechTranscriber: Sendable {
             throw TranscriptionError.emptyAudioFile
         }
 
-        let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
+        let transcriber = DictationTranscriber(locale: locale, preset: .progressiveLongDictation)
         let analyzer = SpeechAnalyzer(modules: [transcriber])
+        if let context = Self.analysisContext(for: contextualPhrases) {
+            try await analyzer.setContext(context)
+        }
         let resultsTask = Task.detached(priority: .userInitiated) {
             var transcript = LiveTranscriptText()
             for try await result in transcriber.results {
@@ -82,5 +86,13 @@ public struct AppleSpeechTranscriber: Sendable {
             resultsTask.cancel()
             throw error
         }
+    }
+
+    public static func analysisContext(for phrases: [String]) -> AnalysisContext? {
+        let boundedPhrases = Array(phrases.prefix(TranscriptionVocabulary.applePhraseLimit))
+        guard !boundedPhrases.isEmpty else { return nil }
+        var context = AnalysisContext()
+        context.contextualStrings[.general] = boundedPhrases
+        return context
     }
 }

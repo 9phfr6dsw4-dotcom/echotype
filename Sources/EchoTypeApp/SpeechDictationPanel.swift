@@ -8,6 +8,7 @@ struct SpeechDictationPanel: View {
     @AppStorage("EchoType.showLiveWords") private var showLiveWords = true
     @AppStorage("EchoType.copyToClipboard") private var copyToClipboard = false
     @AppStorage("EchoType.autoSend") private var autoSend = false
+    @State private var shortcutCaptureError: String?
 
     private var dictation: SpeechDictationViewModel { runtime.dictation }
 
@@ -103,13 +104,17 @@ struct SpeechDictationPanel: View {
                     }
                     .frame(width: 220)
 
-                    Picker("Tap to toggle", selection: Binding(
+                    Picker("Primary key", selection: Binding(
                         get: { runtime.hotkey.selectedKeyCode },
                         set: { runtime.hotkey.chooseKey(keyCode: $0) }
                     )) {
                         Text("Left Control").tag(UInt16(59))
                         Text("Right Option").tag(UInt16(61))
                         Text("Fn / Globe").tag(UInt16(63))
+                        if runtime.hotkey.selectedShortcut != nil {
+                            Text("Custom — \(runtime.hotkey.selectedKeyName)")
+                                .tag(runtime.hotkey.selectedKeyCode)
+                        }
                     }
                     .frame(width: 245)
 
@@ -128,6 +133,47 @@ struct SpeechDictationPanel: View {
                         }
                         .buttonStyle(.borderedProminent)
                     }
+                }
+
+                HStack(spacing: 12) {
+                    KeyboardShortcutCaptureButton(title: "Set Custom Primary…") { shortcut in
+                        guard runtime.hotkey.chooseCustomShortcut(shortcut) else {
+                            shortcutCaptureError = "That key cannot be used as a custom hotkey."
+                            return
+                        }
+                        shortcutCaptureError = nil
+                    }
+
+                    if let backup = runtime.hotkey.backupShortcut {
+                        Text("Backup: \(backup.displayLabel ?? "Key \(backup.keyCode)")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        KeyboardShortcutCaptureButton(title: "Change Backup…") { shortcut in
+                            guard runtime.hotkey.chooseBackupShortcut(shortcut) else {
+                                shortcutCaptureError = "The backup hotkey must be a valid, distinct key chord."
+                                return
+                            }
+                            shortcutCaptureError = nil
+                        }
+                        Button("Remove Backup") {
+                            _ = runtime.hotkey.chooseBackupShortcut(nil)
+                        }
+                        .buttonStyle(.borderless)
+                    } else {
+                        KeyboardShortcutCaptureButton(title: "Add Backup…") { shortcut in
+                            guard runtime.hotkey.chooseBackupShortcut(shortcut) else {
+                                shortcutCaptureError = "The backup hotkey must be a valid, distinct key chord."
+                                return
+                            }
+                            shortcutCaptureError = nil
+                        }
+                    }
+                }
+
+                if let shortcutCaptureError {
+                    Text(shortcutCaptureError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
 
                 Text(runtime.hotkey.statusMessage)

@@ -30,5 +30,7 @@
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>EchoType uses the microphone only while you dictate.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>EchoType can pause Music or Spotify while you dictate if you enable that option.</string>
 </dict>
 </plist>

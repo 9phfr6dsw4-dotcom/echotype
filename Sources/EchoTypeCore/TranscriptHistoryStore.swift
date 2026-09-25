@@ -156,6 +156,15 @@ public final class TranscriptHistoryStore {
         if fileManager.fileExists(atPath: recordsFileURL.path) {
             try fileManager.removeItem(at: recordsFileURL)
         }
+        guard fileManager.fileExists(atPath: storageDirectoryURL.path) else { return }
+        let ownedFiles = try fileManager.contentsOfDirectory(
+            at: storageDirectoryURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        for url in ownedFiles where isEchoTypeAudioFile(url) {
+            try fileManager.removeItem(at: url)
+        }
     }
 
     /// Writes a Markdown snapshot into a directory that already exists. A unique
@@ -213,6 +222,11 @@ public final class TranscriptHistoryStore {
         let url = audioURL(for: recordID)
         guard fileManager.fileExists(atPath: url.path) else { return }
         try fileManager.removeItem(at: url)
+    }
+
+    private func isEchoTypeAudioFile(_ url: URL) -> Bool {
+        guard url.pathExtension == "audio" else { return false }
+        return UUID(uuidString: url.deletingPathExtension().lastPathComponent) != nil
     }
 
     private static func sorted(_ records: [TranscriptRecord]) -> [TranscriptRecord] {

@@ -15,22 +15,24 @@ final class ModelLibraryViewModel {
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let installer: ModelArtifactInstaller
+    @ObservationIgnored private let fluidAudioInstaller: ModelArtifactInstaller
     private var selection: ModelSelection?
 
+    static let parakeetVocabularyDownloadID = "parakeet-ctc-0.6b-coreml"
     private static let selectedEngineDefaultsKey = "EchoType.selectedEngineID"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.installer = ModelArtifactInstaller(modelsDirectory: Self.modelsDirectory())
+        self.fluidAudioInstaller = ModelArtifactInstaller(modelsDirectory: Self.fluidAudioModelsDirectory())
 
         do {
             let catalog = try ModelCatalog.bundled()
             self.catalog = catalog
-            let installed = Set(catalog.engines.compactMap { engine -> String? in
-                guard let downloadID = engine.downloadId,
-                      let download = catalog.download(id: downloadID),
-                      installer.isInstalled(download) else { return nil }
-                return downloadID
+            let installed = Set(catalog.downloads.compactMap { download -> String? in
+                guard Self.installer(for: download, standard: installer, fluidAudio: fluidAudioInstaller)
+                    .isInstalled(download) else { return nil }
+                return download.id
             })
             self.installedDownloadIDs = installed
             let selection = ModelSelection(
@@ -53,12 +55,22 @@ final class ModelLibraryViewModel {
     func installedModelDirectory(for engineID: String) -> URL? {
         guard let catalog,
               let download = catalog.download(forEngineID: engineID) else { return nil }
-        return installer.installedURL(for: download)
+        return installer(for: download).installedURL(for: download)
+    }
+
+    func installedModelDirectory(forDownloadID downloadID: String) -> URL? {
+        guard let download = catalog?.download(id: downloadID),
+              installedDownloadIDs.contains(downloadID) else { return nil }
+        return installer(for: download).installedURL(for: download)
     }
 
     func download(for engine: ModelEngine) -> ModelDownload? {
         guard let downloadID = engine.downloadId else { return nil }
         return catalog?.download(id: downloadID)
+    }
+
+    func optionalDownload(forEngineID engineID: String) -> ModelDownload? {
+        catalog?.downloads.first { $0.engineId == engineID && $0.optional }
     }
 
     func select(engineID: String) {
@@ -73,11 +85,16 @@ final class ModelLibraryViewModel {
     func download(engineID: String) async {
         guard let catalog,
               let engine = catalog.engine(id: engineID),
-              let download = download(for: engine),
+              let download = download(for: engine) else { return }
+        await download(downloadID: download.id)
+    }
+
+    func download(downloadID: String) async {
+        guard let download = catalog?.download(id: downloadID),
               !installedDownloadIDs.contains(download.id),
               activeDownloadIDs.insert(download.id).inserted else { return }
 
-        let downloadID = download.id
+        let downloadInstaller = installer(for: download)
         errorMessage = nil
         defer {
             activeDownloadIDs.remove(downloadID)
@@ -85,7 +102,7 @@ final class ModelLibraryViewModel {
         }
 
         do {
-            _ = try await installer.install(download) { [weak self] progress in
+            _ = try await downloadInstaller.install(download) { [weak self] progress in
                 Task { @MainActor [weak self] in
                     self?.progressByDownloadID[downloadID] = progress
                 }
@@ -101,19 +118,47 @@ final class ModelLibraryViewModel {
         guard let catalog,
               let engine = catalog.engine(id: engineID),
               let download = download(for: engine) else { return }
-
         if selectedEngineID == engineID {
             select(engineID: ModelSelection.appleSpeechEngineID)
         }
-        if try installer.removeInstalled(download) {
+        try remove(downloadID: download.id)
+    }
+
+    func remove(downloadID: String) throws {
+        guard let catalog,
+              let download = catalog.download(id: downloadID) else { return }
+        if let engine = catalog.engine(id: download.engineId),
+           engine.downloadId == download.id,
+           selectedEngineID == engine.id {
+            select(engineID: ModelSelection.appleSpeechEngineID)
+        }
+        if try installer(for: download).removeInstalled(download) {
             installedDownloadIDs.remove(download.id)
         }
+    }
+
+    private func installer(for download: ModelDownload) -> ModelArtifactInstaller {
+        Self.installer(for: download, standard: installer, fluidAudio: fluidAudioInstaller)
+    }
+
+    private static func installer(
+        for download: ModelDownload,
+        standard: ModelArtifactInstaller,
+        fluidAudio: ModelArtifactInstaller
+    ) -> ModelArtifactInstaller {
+        download.id == parakeetVocabularyDownloadID ? fluidAudio : standard
     }
 
     private static func modelsDirectory() -> URL {
         let supportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
         return supportDirectory.appendingPathComponent("EchoType/Models", isDirectory: true)
+    }
+
+    private static func fluidAudioModelsDirectory() -> URL {
+        let supportDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
+        return supportDirectory.appendingPathComponent("FluidAudio/Models", isDirectory: true)
     }
 
     private func refreshSelection() {

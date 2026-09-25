@@ -41,7 +41,10 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertEqual(parakeet.supportedLanguages.count, 25)
         XCTAssertTrue(languages.contains("en"))
         XCTAssertTrue(languages.contains("uk"))
-        XCTAssertEqual(catalog.download(id: "parakeet-v3-ctc-vocab")?.optional, true)
+        let vocabulary = try XCTUnwrap(catalog.download(id: "parakeet-ctc-0.6b-coreml"))
+        XCTAssertTrue(vocabulary.optional)
+        XCTAssertTrue(vocabulary.files.contains { $0.destinationPath == "tokenizer.json" })
+        XCTAssertEqual(vocabulary.bytes, 2_374_186_501)
         XCTAssertEqual(catalog.download(id: "whisper-large-v3-turbo")?.optional, false)
     }
 

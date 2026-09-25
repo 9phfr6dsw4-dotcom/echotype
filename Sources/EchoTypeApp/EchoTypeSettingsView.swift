@@ -6,10 +6,18 @@ import UniformTypeIdentifiers
 struct EchoTypeSettingsView: View {
     @Environment(EchoTypeRuntime.self) private var runtime
     @State private var showingClearConfirmation = false
+    @AppStorage("EchoType.showLiveWords") private var showLiveWords = true
+    @AppStorage(RecordingFeedbackController.dockIconPreferenceKey) private var changeDockIconWhileRecording = false
+    @AppStorage(RecordingFeedbackController.soundsPreferenceKey) private var playRecordingSounds = false
+    @State private var newVocabularyTerm = ""
+    @State private var vocabularyDrafts: [UUID: String] = [:]
 
     private var history: TranscriptHistoryViewModel { runtime.history }
     private var excludedApps: ExcludedApplicationsViewModel { runtime.excludedApplications }
     private var microphones: MicrophoneSettingsViewModel { runtime.microphones }
+    private var learning: LocalLearningViewModel { runtime.localLearning }
+    private var vocabulary: CustomVocabularyViewModel { runtime.customVocabulary }
+    private var recordingAudioOptions: RecordingAudioOptionsController { runtime.recordingAudioOptions }
 
     var body: some View {
         ScrollView {
@@ -25,6 +33,10 @@ struct EchoTypeSettingsView: View {
                 historySettings
                 microphoneSettings
                 excludedApplicationsSettings
+                localLearningSettings
+                customVocabularySettings
+                recordingBehaviorSettings
+                recordingAudioSettings
 
                 Label("Speech and transcripts stay on this Mac. EchoType does not use accounts, analytics, or cloud transcription.", systemImage: "lock.shield")
                     .font(.footnote)
@@ -50,6 +62,16 @@ struct EchoTypeSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes EchoType transcript history and audio recordings. Learned words and files outside EchoType's transcript store are kept.")
+        }
+        .onAppear {
+            runtime.overlayModel.showLiveWords = showLiveWords
+            runtime.recordingFeedback.setDockIconChangeEnabled(changeDockIconWhileRecording)
+        }
+        .onChange(of: showLiveWords) { _, enabled in
+            runtime.overlayModel.showLiveWords = enabled
+        }
+        .onChange(of: changeDockIconWhileRecording) { _, enabled in
+            runtime.recordingFeedback.setDockIconChangeEnabled(enabled)
         }
         .frame(minWidth: 760, minHeight: 580)
     }
@@ -162,6 +184,178 @@ struct EchoTypeSettingsView: View {
         }
     }
 
+    private var localLearningSettings: some View {
+        GroupBox("Local learning") {
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle("Ask me before adding learned words", isOn: Binding(
+                    get: { learning.askBeforeAdding },
+                    set: { learning.askBeforeAdding = $0 }
+                ))
+                Text("EchoType learns only from explicit corrections you save in transcript history. The same correction must appear at least three times; short common words are ignored. Learned words stay on this Mac and are kept when transcript history is cleared.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if !learning.store.pendingAdditions.isEmpty {
+                    Divider()
+                    Text("Needs your confirmation")
+                        .font(.subheadline.weight(.semibold))
+                    ForEach(Array(learning.store.pendingAdditions.enumerated()), id: \.offset) { entry in
+                        let item = entry.element
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.term).font(.body.weight(.medium))
+                                Text("Correction: \(item.original) → \(item.term) · \(item.occurrenceCount) times")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Add") { _ = learning.confirmAddition(of: item.term) }
+                            Button("Ignore", role: .destructive) { _ = learning.rejectAddition(of: item.term) }
+                        }
+                    }
+                }
+
+                Divider()
+                HStack {
+                    Text("Learned words")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text("\(learning.store.learnedTerms.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if learning.store.learnedTerms.isEmpty {
+                    Text("No learned words yet. Correct and save a transcript to teach EchoType.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(learning.store.learnedTerms) { term in
+                        HStack {
+                            Text(term.term)
+                            Text("· \(term.occurrenceCount) corrections")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button(term.isPinned ? "Unpin" : "Pin") {
+                                _ = learning.setPinned(!term.isPinned, for: term.term)
+                            }
+                            Button("Remove", role: .destructive) {
+                                _ = learning.removeLearnedTerm(term.term)
+                            }
+                        }
+                    }
+                }
+
+                if let errorMessage = learning.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var customVocabularySettings: some View {
+        GroupBox("Custom vocabulary") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Add names and unusual words to bias supported local speech engines. Apple Speech uses up to 100 contextual phrases; Whisper uses decoder prompt tokens; Parakeet requires its optional 2.37 GB CTC rescoring model in Speech Models. Nothing is downloaded automatically.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack {
+                    TextField("Name or unusual word", text: $newVocabularyTerm)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(addVocabularyTerm)
+                    Button("Add", action: addVocabularyTerm)
+                        .disabled(!vocabulary.canMutate || newVocabularyTerm.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                if vocabulary.store.terms.isEmpty {
+                    Text("No custom terms yet.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(vocabulary.store.terms) { term in
+                        HStack(spacing: 8) {
+                            TextField("Vocabulary term", text: vocabularyBinding(for: term))
+                                .textFieldStyle(.roundedBorder)
+                                .disabled(!vocabulary.canMutate)
+                            Button("Save") { saveVocabularyTerm(term) }
+                                .disabled(!vocabulary.canMutate)
+                            Button("Remove", role: .destructive) { removeVocabularyTerm(term) }
+                                .disabled(!vocabulary.canMutate)
+                        }
+                    }
+                }
+
+                if let errorMessage = vocabulary.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var recordingBehaviorSettings: some View {
+        GroupBox("Recording behavior") {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle("Show live words in the recording overlay", isOn: $showLiveWords)
+                Toggle("Change the Dock icon while recording", isOn: $changeDockIconWhileRecording)
+                Toggle("Play optional recording start/stop sounds", isOn: $playRecordingSounds)
+                Text("These cues are off by default. The overlay can show only a recording indicator when live words are hidden; temporary audio is still deleted after transcription unless audio saving is enabled above.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var recordingAudioSettings: some View {
+        GroupBox("Media and output volume") {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle("Pause Music and Spotify while recording", isOn: Binding(
+                    get: { recordingAudioOptions.pauseSupportedPlayersWhenRecording },
+                    set: { recordingAudioOptions.pauseSupportedPlayersWhenRecording = $0 }
+                ))
+                Toggle("Lower system output volume while recording", isOn: Binding(
+                    get: { recordingAudioOptions.lowerOutputVolumeWhenRecording },
+                    set: { recordingAudioOptions.lowerOutputVolumeWhenRecording = $0 }
+                ))
+                HStack {
+                    Text("Reduce by \(Int(recordingAudioOptions.outputVolumeReductionPercent))%")
+                        .frame(width: 115, alignment: .leading)
+                    Slider(value: Binding(
+                        get: { recordingAudioOptions.outputVolumeReductionPercent },
+                        set: { recordingAudioOptions.outputVolumeReductionPercent = $0 }
+                    ), in: 0...100, step: 5)
+                    .disabled(!recordingAudioOptions.lowerOutputVolumeWhenRecording)
+                }
+
+                Text("Media controls are optional and may require macOS Automation permission. Only Music and Spotify are controlled; browser media is not. EchoType restores the saved output volume when recording ends. Instant-on microphone is unavailable in this build, so EchoType never leaves it active between sessions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(recordingAudioOptions.statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
+    }
+
     private var microphoneSettings: some View {
         GroupBox("Microphones") {
             VStack(alignment: .leading, spacing: 12) {
@@ -240,6 +434,41 @@ struct EchoTypeSettingsView: View {
             .padding(.vertical, 4)
         }
         .onAppear { microphones.refreshDevices() }
+    }
+
+    private func addVocabularyTerm() {
+        do {
+            _ = try vocabulary.addTerm(newVocabularyTerm)
+            newVocabularyTerm = ""
+        } catch {
+            // The view model exposes a local, user-readable error message.
+        }
+    }
+
+    private func vocabularyBinding(for term: CustomVocabularyTerm) -> Binding<String> {
+        Binding(
+            get: { vocabularyDrafts[term.id] ?? term.term },
+            set: { vocabularyDrafts[term.id] = $0 }
+        )
+    }
+
+    private func saveVocabularyTerm(_ term: CustomVocabularyTerm) {
+        guard let draft = vocabularyDrafts[term.id] else { return }
+        do {
+            _ = try vocabulary.editTerm(id: term.id, to: draft)
+            vocabularyDrafts.removeValue(forKey: term.id)
+        } catch {
+            // The view model exposes a local, user-readable error message.
+        }
+    }
+
+    private func removeVocabularyTerm(_ term: CustomVocabularyTerm) {
+        do {
+            _ = try vocabulary.removeTerm(id: term.id)
+            vocabularyDrafts.removeValue(forKey: term.id)
+        } catch {
+            // The view model exposes a local, user-readable error message.
+        }
     }
 
     private func setting<Value>(_ keyPath: WritableKeyPath<TranscriptHistorySettings, Value>) -> Binding<Value> {

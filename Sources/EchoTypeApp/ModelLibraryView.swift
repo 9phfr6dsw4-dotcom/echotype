@@ -6,6 +6,8 @@ struct ModelLibraryView: View {
     @Environment(EchoTypeRuntime.self) private var runtime
     @State private var deletionCandidate: ModelEngine?
     @State private var showingDeleteConfirmation = false
+    @State private var vocabularyDeletionCandidate: ModelDownload?
+    @State private var showingVocabularyDeleteConfirmation = false
 
     private var library: ModelLibraryViewModel { runtime.modelLibrary }
 
@@ -29,6 +31,9 @@ struct ModelLibraryView: View {
                     LazyVStack(spacing: 16) {
                         ForEach(catalog.engines) { engine in
                             modelCard(engine)
+                            if let vocabularyDownload = library.optionalDownload(forEngineID: engine.id) {
+                                optionalVocabularySection(vocabularyDownload)
+                            }
                         }
                     }
                 } else {
@@ -61,6 +66,24 @@ struct ModelLibraryView: View {
             Button("Cancel", role: .cancel) { deletionCandidate = nil }
         } message: {
             Text("Remove the verified model files for \(deletionCandidate?.displayName ?? "this model") from this Mac? You can download them again later.")
+        }
+        .confirmationDialog(
+            "Delete optional vocabulary model?",
+            isPresented: $showingVocabularyDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Vocabulary Model", role: .destructive) {
+                guard let download = vocabularyDeletionCandidate else { return }
+                do {
+                    try library.remove(downloadID: download.id)
+                } catch {
+                    library.errorMessage = error.localizedDescription
+                }
+                vocabularyDeletionCandidate = nil
+            }
+            Button("Cancel", role: .cancel) { vocabularyDeletionCandidate = nil }
+        } message: {
+            Text("Remove the optional Parakeet custom-vocabulary model (\(vocabularyDeletionCandidate.map { ByteCountFormatter.string(fromByteCount: Int64($0.bytes), countStyle: .file) } ?? "")) from this Mac?")
         }
         .frame(minWidth: 760, minHeight: 580)
     }
@@ -177,6 +200,56 @@ struct ModelLibraryView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 6)
+        }
+    }
+
+    private func optionalVocabularySection(_ download: ModelDownload) -> some View {
+        let installed = library.installedDownloadIDs.contains(download.id)
+        let downloading = library.activeDownloadIDs.contains(download.id)
+        let progress = library.progressByDownloadID[download.id]
+        let formattedSize = ByteCountFormatter.string(fromByteCount: Int64(download.bytes), countStyle: .file)
+
+        return GroupBox("Optional Parakeet custom vocabulary") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Uses the local CTC acoustic rescoring model to bias recognition toward dictionary and learned terms. This separate model is about \(formattedSize); it is not downloaded unless you click below, and every file is checksum-verified.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if downloading, let progress {
+                    ProgressView(value: Double(progress.verifiedBytes), total: Double(max(progress.totalBytes, 1)))
+                    Text("Verified \(progress.verifiedFileCount) of \(progress.fileCount) files · \(progress.currentPath)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else if downloading {
+                    ProgressView("Downloading and verifying vocabulary model…")
+                }
+
+                HStack {
+                    if installed {
+                        Label("Installed", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Spacer()
+                        Button("Remove…", role: .destructive) {
+                            vocabularyDeletionCandidate = download
+                            showingVocabularyDeleteConfirmation = true
+                        }
+                    } else {
+                        Spacer()
+                        Button {
+                            Task { await library.download(downloadID: download.id) }
+                        } label: {
+                            Label("Download (\(formattedSize))", systemImage: "arrow.down.to.line")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(downloading)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
         }
     }
 

@@ -231,10 +231,10 @@
       ]
     },
     {
-      "id": "parakeet-v3-ctc-vocab",
+      "id": "parakeet-ctc-0.6b-coreml",
       "engineId": "parakeet-v3",
       "optional": true,
-      "bytes": 2373826395,
+      "bytes": 2374186501,
       "license": "CC-BY-4.0 original NVIDIA model; conversion repository does not declare a license field",
       "sources": [
         {
@@ -326,6 +326,15 @@
           "destinationPath": "vocab.json",
           "size": 14960,
           "sha256": "80913bfafb2750776f536fb54c4cea3165013608c80c0edbf608415951d5385d",
+          "sha256Source": "computed-from-pinned-file"
+        },
+        {
+          "repo": "FluidInference/parakeet-ctc-0.6b-coreml",
+          "revision": "73c405fce92eb8264ea8f5b1260283eeee05aa27",
+          "sourcePath": "tokenizer.json",
+          "destinationPath": "tokenizer.json",
+          "size": 360106,
+          "sha256": "9f7c517c0bf644b1b690ab037bab4d4c53aecd38e047e7154d011013ab9160db",
           "sha256Source": "computed-from-pinned-file"
         }
       ]

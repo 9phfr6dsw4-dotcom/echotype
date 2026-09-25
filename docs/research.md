@@ -1,6 +1,6 @@
 # EchoType: product, model, and delivery research
 
-**Reviewed:** September 24, 2026
+**Reviewed:** September 25, 2026
 **Target:** native macOS 26 dictation app for the user’s M5 MacBook Air.
 **Privacy boundary:** speech, transcripts, corrections, preferences, and model use stay on the Mac. No telemetry or upload.
 
@@ -93,13 +93,14 @@ The UI will distinguish these mechanisms from post-transcription spelling correc
 |---|---|
 | Engine selection | Exactly three choices. Apple is the working first-run fallback; after Parakeet has downloaded and loaded successfully, make it the default. Switching happens between recordings. |
 | Live preview | Use the selected engine for partial and final text. Never label Apple preview as Parakeet or Whisper. Allow hiding live words while keeping a recording indicator. |
-| Hotkeys | Left Control bare tap-to-toggle by default, with Right Option as a selectable alternative. Ignore modifier chords, never consume keystrokes, and keep the monitor in app-level runtime so closing the window does not stop it. Hold-to-talk, backup, and custom key capture remain unimplemented. |
+| Hotkeys | Left Control bare tap-to-toggle by default, with Right Option and Fn/Globe as selectable alternatives. Hold-to-talk and custom modifier-plus-key capture are available; one optional custom backup chord can be added. Ignore ordinary modifier chords, never consume hotkey events, and keep the monitor in app-level runtime so closing the window does not stop it. |
 | Overlay and focus | A non-activating overlay uses the screen’s auxiliary top areas to center around the camera housing, joins full-screen Spaces, and is hidden when idle. Interactive placement still needs testing on the M5 Mac. Before paste, verify the original process and focused AX element, allow only known text-input roles, reject secure fields and password-manager apps, and save/restore clipboard data unless the user asks to keep the transcript there. |
 | Text delivery | On a safe unchanged target, paste with Command-V; optional Return is separately enabled. If focus changed, secure input is detected, or Accessibility inspection is unavailable, do not paste and explain that the transcript can be copied manually. |
 | App presence | Keep a normal Dock icon and a reopenable settings/history window. |
 | Storage | Audio stays in memory by default; optional audio saving is off initially. Local transcript history defaults to 30 days, with 7 days, 90 days, and forever choices. Retention never deletes learned terms. |
-| Learning | Ask before adding learned terms by default and require repeated confirmation. External correction learning is opt-in, limited to the just-inserted text and a brief window, and skips secure/excluded targets. Never read screenshots, URLs, titles, or unrelated field content. |
+| Learning | Learn only from explicit transcript-history edits, require at least three matching corrections, and ignore short common words. The optional confirmation toggle defaults off, as requested. Detecting corrections made in another app after paste is not implemented; EchoType does not inspect other-app text for learning. |
 | Vocabulary | Apple contextual strings, Whisper prompt tokens, and Parakeet CTC rescoring only when its optional companion is installed. |
+| Recording options | Optional controls can pause Music/Spotify and lower writable system output volume, with saved volume restored at recording end. Browser media is not controlled. Instant-on microphone is not implemented and keeps no microphone open; the current control must be treated as unavailable, not as an active feature. |
 | Comparison | Keep a recent clip in memory briefly for same-clip comparison; persist only if audio saving is enabled. Record local per-engine processing duration. |
 | Network | No telemetry, analytics, update checks, or background model downloads. Only user-initiated model/Apple-asset downloads; never upload speech, transcript, corrections, filenames, or usage data. |
 

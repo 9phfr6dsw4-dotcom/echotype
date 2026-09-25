@@ -9,11 +9,15 @@ final class EchoTypeRuntime {
     let dictation: SpeechDictationViewModel
     let modelLibrary: ModelLibraryViewModel
     let history: TranscriptHistoryViewModel
+    let localLearning: LocalLearningViewModel
+    let customVocabulary: CustomVocabularyViewModel
     let excludedApplications: ExcludedApplicationsViewModel
     let microphones: MicrophoneSettingsViewModel
     let hotkey: GlobalHotkeyController
     let overlayModel: RecordingOverlayModel
     let textInsertion: TextInsertionService
+    let recordingFeedback: RecordingFeedbackController
+    let recordingAudioOptions: RecordingAudioOptionsController
 
     var deliveryMessage: String?
 
@@ -30,14 +34,22 @@ final class EchoTypeRuntime {
         let dictation = SpeechDictationViewModel(microphoneSettings: microphones)
         let modelLibrary = ModelLibraryViewModel()
         let history = TranscriptHistoryViewModel()
+        let localLearning = LocalLearningViewModel()
+        let customVocabulary = CustomVocabularyViewModel()
         let excludedApplications = ExcludedApplicationsViewModel()
         let overlayModel = RecordingOverlayModel()
+        let recordingFeedback = RecordingFeedbackController()
+        let recordingAudioOptions = RecordingAudioOptionsController()
         self.dictation = dictation
         self.modelLibrary = modelLibrary
         self.history = history
+        self.localLearning = localLearning
+        self.customVocabulary = customVocabulary
         self.excludedApplications = excludedApplications
         self.microphones = microphones
         self.overlayModel = overlayModel
+        self.recordingFeedback = recordingFeedback
+        self.recordingAudioOptions = recordingAudioOptions
         self.hotkey = GlobalHotkeyController()
         self.textInsertion = TextInsertionService()
         self.overlayWindow = RecordingOverlayWindowController(model: overlayModel)
@@ -107,14 +119,26 @@ final class EchoTypeRuntime {
         capturedInsertionTarget = textInsertion.captureTarget()
         let languageIdentifier = UserDefaults.standard.string(forKey: "EchoType.transcriptionLanguage")
             ?? Locale.current.identifier
+        let vocabularyTerms = TranscriptionVocabulary.terms(
+            customTerms: customVocabulary.store.terms.map(\.term),
+            learnedTerms: localLearning.store.learnedTerms
+        )
         await dictation.startRecording(
             backend: backend,
             modelDirectory: modelDirectory,
-            languageIdentifier: languageIdentifier
+            languageIdentifier: languageIdentifier,
+            vocabularyTerms: vocabularyTerms,
+            ctcVocabularyDirectory: backend == .parakeetV3
+                ? modelLibrary.installedModelDirectory(
+                    forDownloadID: ModelLibraryViewModel.parakeetVocabularyDownloadID
+                )
+                : nil
         )
         if dictation.isRecording {
             recordingStartedAt = Date()
             recordingEngineID = engineID
+            recordingAudioOptions.startRecording()
+            recordingFeedback.recordingStarted()
         } else {
             capturedInsertionTarget = nil
         }
@@ -140,6 +164,8 @@ final class EchoTypeRuntime {
         isDeliveringTranscript = true
         overlayModel.phase = .finishing
         overlayWindow.show()
+        recordingAudioOptions.stopRecording()
+        recordingFeedback.recordingStopped()
         await dictation.stopAndTranscribe(saveAudio: history.settings.historyEnabled && history.settings.saveAudio)
         let duration = max(0, Date().timeIntervalSince(recordingStartedAt ?? Date()))
         recordingStartedAt = nil
@@ -177,6 +203,8 @@ final class EchoTypeRuntime {
     }
 
     private func discardRecordingInExcludedApp() async {
+        recordingAudioOptions.stopRecording()
+        recordingFeedback.recordingStopped()
         await dictation.cancelAndDiscardRecording()
         capturedInsertionTarget = nil
         deliveryMessage = "Recording discarded because a password manager became active."
