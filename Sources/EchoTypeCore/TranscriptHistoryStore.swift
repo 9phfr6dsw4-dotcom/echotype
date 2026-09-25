@@ -169,7 +169,7 @@ public final class TranscriptHistoryStore {
     @discardableResult
     public func archiveMarkdown(for record: TranscriptRecord, to directoryURL: URL) throws -> URL {
         try Self.validate(record)
-        try writeMarkdown(markdownArchive(for: [record]), to: directoryURL)
+        return try writeMarkdown(markdownArchive(for: [record]), to: directoryURL)
     }
 
     private func writeMarkdown(_ markdown: String, to directoryURL: URL) throws -> URL {
