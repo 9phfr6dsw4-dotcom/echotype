@@ -16,6 +16,7 @@ final class SpeechDictationViewModel {
     var errorMessage: String?
 
     @ObservationIgnored private let transcriber = AppleSpeechTranscriber()
+    @ObservationIgnored private let microphoneSettings: MicrophoneSettingsViewModel
     @ObservationIgnored private var preparedLocaleIdentifier: String?
     @ObservationIgnored private var recordingBackend: TranscriptionBackend?
     @ObservationIgnored private var recordingModelDirectory: URL?
@@ -30,7 +31,8 @@ final class SpeechDictationViewModel {
     @ObservationIgnored private var liveTranscript = LiveTranscriptText()
     @ObservationIgnored var onChange: ((SpeechDictationViewModel) -> Void)?
 
-    init() {
+    init(microphoneSettings: MicrophoneSettingsViewModel) {
+        self.microphoneSettings = microphoneSettings
         Self.removeInterruptedRecordings()
     }
 
@@ -86,10 +88,6 @@ final class SpeechDictationViewModel {
             return
         }
 
-        guard let device = AVCaptureDevice.default(for: .audio) else {
-            errorMessage = "No microphone is available. Connect or enable a microphone, then try again."
-            return
-        }
         guard let preparedLocaleIdentifier,
               let locale = await SpeechTranscriber.supportedLocale(
                 equivalentTo: Locale(identifier: preparedLocaleIdentifier)
@@ -100,6 +98,13 @@ final class SpeechDictationViewModel {
 
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
+        let selectedMicrophoneName: String
+        do {
+            selectedMicrophoneName = try microphoneSettings.configure(inputNode: inputNode)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
         let inputFormat = inputNode.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
             errorMessage = "The selected microphone is not ready. Check the audio input in System Settings."
@@ -158,7 +163,7 @@ final class SpeechDictationViewModel {
             inputBridge = bridge
             speechAnalyzer = analyzer
             liveResultsTask = resultsTask
-            microphoneName = device.localizedName
+            microphoneName = selectedMicrophoneName
             transcript = ""
             liveTranscript.reset()
             isRecording = true
@@ -184,19 +189,20 @@ final class SpeechDictationViewModel {
             errorMessage = "Microphone access is off. Allow EchoType in System Settings → Privacy & Security → Microphone."
             return
         }
-        guard let device = AVCaptureDevice.default(for: .audio) else {
-            errorMessage = "No microphone is available. Connect or enable a microphone, then try again."
-            return
-        }
-
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
+        let selectedMicrophoneName: String
+        do {
+            selectedMicrophoneName = try microphoneSettings.configure(inputNode: inputNode)
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
         let inputFormat = inputNode.outputFormat(forBus: 0)
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
             errorMessage = "The selected microphone is not ready. Check the audio input in System Settings."
             return
         }
-
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("EchoTypeRecording-\(UUID().uuidString)")
             .appendingPathExtension("caf")
@@ -213,7 +219,7 @@ final class SpeechDictationViewModel {
             audioEngine = engine
             audioWriter = writer
             recordingURL = url
-            microphoneName = device.localizedName
+            microphoneName = selectedMicrophoneName
             transcript = ""
             liveTranscript.reset()
             isRecording = true

@@ -9,6 +9,7 @@ struct EchoTypeSettingsView: View {
 
     private var history: TranscriptHistoryViewModel { runtime.history }
     private var excludedApps: ExcludedApplicationsViewModel { runtime.excludedApplications }
+    private var microphones: MicrophoneSettingsViewModel { runtime.microphones }
 
     var body: some View {
         ScrollView {
@@ -22,6 +23,7 @@ struct EchoTypeSettingsView: View {
                 }
 
                 historySettings
+                microphoneSettings
                 excludedApplicationsSettings
 
                 Label("Speech and transcripts stay on this Mac. EchoType does not use accounts, analytics, or cloud transcription.", systemImage: "lock.shield")
@@ -158,6 +160,73 @@ struct EchoTypeSettingsView: View {
             }
             .padding(.vertical, 4)
         }
+    }
+
+    private var microphoneSettings: some View {
+        GroupBox("Microphones") {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Input", selection: Binding(
+                    get: { microphones.pickerSelection },
+                    set: { microphones.setPickerSelection($0) }
+                )) {
+                    Text("Automatic (priority order)").tag(MicrophoneSettingsViewModel.automaticSelection)
+                    ForEach(microphones.devices) { device in
+                        Text(device.name).tag(device.id)
+                    }
+                }
+
+                HStack {
+                    Text("Ready now: \(microphones.currentReadyDevice?.name ?? "No microphone ready")")
+                        .font(.caption)
+                        .foregroundStyle(microphones.currentReadyDevice == nil ? .red : .secondary)
+                    Spacer()
+                    Button("Refresh") { microphones.refreshDevices() }
+                    EditButton()
+                }
+
+                if microphones.orderedDevices.isEmpty {
+                    Text("Connect or enable a microphone to see it here.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    List {
+                        ForEach(microphones.orderedDevices) { device in
+                            HStack {
+                                Text(device.name)
+                                Spacer()
+                                if device.id == microphones.currentReadyDevice?.id {
+                                    Label("Ready", systemImage: "checkmark.circle.fill")
+                                        .font(.caption)
+                                        .foregroundStyle(.green)
+                                }
+                            }
+                        }
+                        .onMove { indices, destination in
+                            microphones.movePriority(from: indices, to: destination)
+                        }
+                    }
+                    .frame(minHeight: 100, maxHeight: 190)
+                }
+
+                Text("Automatic follows this order and appends newly discovered microphones at the bottom. A directly selected device falls back safely if it is disconnected or disallowed.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if microphones.isLidClosed {
+                    Label("Closed-lid mode is active; the built-in MacBook microphone is skipped.", systemImage: "laptopcomputer")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let errorMessage = microphones.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .onAppear { microphones.refreshDevices() }
     }
 
     private func setting<Value>(_ keyPath: WritableKeyPath<TranscriptHistorySettings, Value>) -> Binding<Value> {

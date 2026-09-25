@@ -10,6 +10,7 @@ final class EchoTypeRuntime {
     let modelLibrary: ModelLibraryViewModel
     let history: TranscriptHistoryViewModel
     let excludedApplications: ExcludedApplicationsViewModel
+    let microphones: MicrophoneSettingsViewModel
     let hotkey: GlobalHotkeyController
     let overlayModel: RecordingOverlayModel
     let textInsertion: TextInsertionService
@@ -25,7 +26,8 @@ final class EchoTypeRuntime {
     @ObservationIgnored private var recordingEngineID: String?
 
     init() {
-        let dictation = SpeechDictationViewModel()
+        let microphones = MicrophoneSettingsViewModel()
+        let dictation = SpeechDictationViewModel(microphoneSettings: microphones)
         let modelLibrary = ModelLibraryViewModel()
         let history = TranscriptHistoryViewModel()
         let excludedApplications = ExcludedApplicationsViewModel()
@@ -34,6 +36,7 @@ final class EchoTypeRuntime {
         self.modelLibrary = modelLibrary
         self.history = history
         self.excludedApplications = excludedApplications
+        self.microphones = microphones
         self.overlayModel = overlayModel
         self.hotkey = GlobalHotkeyController()
         self.textInsertion = TextInsertionService()
