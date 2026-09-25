@@ -99,7 +99,7 @@ final class GlobalHotkeyController {
 
     func openAccessibilitySettings() {
         if !AXIsProcessTrusted() {
-            let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+            let promptKey = "AXTrustedCheckOptionPrompt"
             let options = [promptKey: true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
         }

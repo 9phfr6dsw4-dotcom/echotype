@@ -529,7 +529,7 @@ final class TextInsertionService {
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
               let value,
               CFGetTypeID(value) == AXValueGetTypeID(),
-              let axValue = value as? AXValue,
+              let axValue = value as! AXValue,
               AXValueGetType(axValue) == .cfRange else {
             return nil
         }
