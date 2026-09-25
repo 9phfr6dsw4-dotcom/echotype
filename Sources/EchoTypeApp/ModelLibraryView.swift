@@ -3,23 +3,17 @@ import EchoTypeCore
 import SwiftUI
 
 struct ModelLibraryView: View {
-    @State private var library = ModelLibraryViewModel()
+    @Environment(EchoTypeRuntime.self) private var runtime
     @State private var deletionCandidate: ModelEngine?
     @State private var showingDeleteConfirmation = false
+
+    private var library: ModelLibraryViewModel { runtime.modelLibrary }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
-                if library.selectedEngineID == ModelSelection.appleSpeechEngineID {
-                    SpeechDictationPanel()
-                } else {
-                    GroupBox("Dictation") {
-                        Label("Recording is currently connected to Apple Speech. The selected model does not have a recording adapter yet.", systemImage: "info.circle")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 8)
-                    }
-                }
+                SpeechDictationPanel()
 
                 if let startupError = library.startupError {
                     ContentUnavailableView(

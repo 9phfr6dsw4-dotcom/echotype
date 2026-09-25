@@ -17,6 +17,9 @@ final class SpeechDictationViewModel {
 
     @ObservationIgnored private let transcriber = AppleSpeechTranscriber()
     @ObservationIgnored private var preparedLocaleIdentifier: String?
+    @ObservationIgnored private var recordingBackend: TranscriptionBackend?
+    @ObservationIgnored private var recordingModelDirectory: URL?
+    @ObservationIgnored private var recordingLanguageIdentifier: String?
     @ObservationIgnored private var audioEngine: AVAudioEngine?
     @ObservationIgnored private var audioWriter: AudioFileWriter?
     @ObservationIgnored private var recordingURL: URL?
@@ -44,7 +47,35 @@ final class SpeechDictationViewModel {
         }
     }
 
-    func startRecording() async {
+    func startRecording(
+        backend: TranscriptionBackend,
+        modelDirectory: URL?,
+        languageIdentifier: String
+    ) async {
+        switch backend {
+        case .appleSpeech:
+            await startAppleSpeechRecording()
+            if isRecording {
+                recordingBackend = .appleSpeech
+                recordingLanguageIdentifier = languageIdentifier
+            }
+        case .parakeetV3, .whisperLargeV3Turbo:
+            guard let modelDirectory else {
+                errorMessage = "The selected model is not installed. Download it from Speech Models, then try again."
+                return
+            }
+            await startAudioOnlyRecording()
+            if isRecording {
+                recordingBackend = backend
+                recordingModelDirectory = modelDirectory
+                recordingLanguageIdentifier = languageIdentifier
+            }
+        case .unavailable(let engineID):
+            errorMessage = "The selected transcription engine is unavailable: \(engineID)."
+        }
+    }
+
+    private func startAppleSpeechRecording() async {
         guard assetsPrepared, !isRecording, !isTranscribing else { return }
         errorMessage = nil
 
@@ -143,6 +174,58 @@ final class SpeechDictationViewModel {
         }
     }
 
+    private func startAudioOnlyRecording() async {
+        guard !isPreparingAssets, !isRecording, !isTranscribing else { return }
+        errorMessage = nil
+
+        guard await microphoneAccessGranted() else {
+            errorMessage = "Microphone access is off. Allow EchoType in System Settings → Privacy & Security → Microphone."
+            return
+        }
+        guard let device = AVCaptureDevice.default(for: .audio) else {
+            errorMessage = "No microphone is available. Connect or enable a microphone, then try again."
+            return
+        }
+
+        let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            errorMessage = "The selected microphone is not ready. Check the audio input in System Settings."
+            return
+        }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("EchoTypeRecording-\(UUID().uuidString)")
+            .appendingPathExtension("caf")
+        var tapInstalled = false
+        do {
+            let writer = try AudioFileWriter(url: url, settings: inputFormat.settings)
+            inputNode.installTap(onBus: 0, bufferSize: 2_048, format: inputFormat) { buffer, _ in
+                writer.write(buffer)
+            }
+            tapInstalled = true
+            engine.prepare()
+            try engine.start()
+
+            audioEngine = engine
+            audioWriter = writer
+            recordingURL = url
+            microphoneName = device.localizedName
+            transcript = ""
+            liveTranscript.reset()
+            isRecording = true
+            onChange?(self)
+        } catch {
+            if tapInstalled {
+                inputNode.removeTap(onBus: 0)
+            }
+            engine.stop()
+            try? FileManager.default.removeItem(at: url)
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func stopAndTranscribe() async {
         guard isRecording, let engine = audioEngine, let recordingURL else { return }
         isRecording = false
@@ -151,6 +234,9 @@ final class SpeechDictationViewModel {
         defer {
             try? FileManager.default.removeItem(at: recordingURL)
             self.recordingURL = nil
+            self.recordingBackend = nil
+            self.recordingModelDirectory = nil
+            self.recordingLanguageIdentifier = nil
             self.isTranscribing = false
             self.onChange?(self)
         }
@@ -186,18 +272,37 @@ final class SpeechDictationViewModel {
             errorMessage = "Could not finish the temporary recording: \(writeError)"
             return
         }
-        guard let preparedLocaleIdentifier else {
-            transcript = liveText
-            errorMessage = "Prepare Apple Speech before recording."
-            return
-        }
-
+        let languageIdentifier = recordingLanguageIdentifier ?? Locale.current.identifier
         do {
-            let finalTranscript = try await transcriber.transcribe(
-                audioFileAt: recordingURL,
-                localeIdentifier: preparedLocaleIdentifier
-            )
-            transcript = finalTranscript.isEmpty ? liveText : finalTranscript
+            switch recordingBackend {
+            case .appleSpeech:
+                guard let preparedLocaleIdentifier else {
+                    transcript = liveText
+                    errorMessage = "Prepare Apple Speech before recording."
+                    return
+                }
+                let finalTranscript = try await transcriber.transcribe(
+                    audioFileAt: recordingURL,
+                    localeIdentifier: preparedLocaleIdentifier
+                )
+                transcript = finalTranscript.isEmpty ? liveText : finalTranscript
+            case .parakeetV3, .whisperLargeV3Turbo:
+                guard let recordingModelDirectory, let backend = recordingBackend else {
+                    throw LocalModelTranscriber.TranscriptionError.unavailableBackend(
+                        String(describing: recordingBackend)
+                    )
+                }
+                transcript = try await LocalModelTranscriber.transcribe(
+                    backend: backend,
+                    audioURL: recordingURL,
+                    modelDirectory: recordingModelDirectory,
+                    languageIdentifier: languageIdentifier
+                )
+            case .unavailable(let engineID):
+                throw LocalModelTranscriber.TranscriptionError.unavailableBackend(engineID)
+            case nil:
+                throw LocalModelTranscriber.TranscriptionError.unavailableBackend("no selected engine")
+            }
         } catch {
             transcript = liveText
             errorMessage = error.localizedDescription
@@ -224,6 +329,9 @@ final class SpeechDictationViewModel {
         self.recordingURL = nil
         liveTranscript.reset()
         transcript = ""
+        recordingBackend = nil
+        recordingModelDirectory = nil
+        recordingLanguageIdentifier = nil
         onChange?(self)
     }
 

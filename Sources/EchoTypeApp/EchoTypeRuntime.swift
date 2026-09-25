@@ -7,6 +7,7 @@ import Observation
 @Observable
 final class EchoTypeRuntime {
     let dictation: SpeechDictationViewModel
+    let modelLibrary: ModelLibraryViewModel
     let hotkey: GlobalHotkeyController
     let overlayModel: RecordingOverlayModel
     let textInsertion: TextInsertionService
@@ -21,8 +22,10 @@ final class EchoTypeRuntime {
 
     init() {
         let dictation = SpeechDictationViewModel()
+        let modelLibrary = ModelLibraryViewModel()
         let overlayModel = RecordingOverlayModel()
         self.dictation = dictation
+        self.modelLibrary = modelLibrary
         self.overlayModel = overlayModel
         self.hotkey = GlobalHotkeyController()
         self.textInsertion = TextInsertionService()
@@ -55,10 +58,39 @@ final class EchoTypeRuntime {
             dictation.errorMessage = "Dictation is disabled while a password manager is frontmost."
             return
         }
+        guard let catalog = modelLibrary.catalog else {
+            dictation.errorMessage = modelLibrary.startupError ?? "The speech model catalog is unavailable."
+            return
+        }
+        let engineID = modelLibrary.selectedEngineID
+        let backend = TranscriptionBackend.resolve(
+            engineID: engineID,
+            catalog: catalog,
+            installedDownloadIDs: modelLibrary.installedDownloadIDs
+        )
+        if case .unavailable(let unavailableEngineID) = backend {
+            dictation.errorMessage = "The selected transcription engine is unavailable: \(unavailableEngineID)."
+            return
+        }
+        let modelDirectory = modelLibrary.installedModelDirectory(for: engineID)
+        if backend == .appleSpeech, !dictation.assetsPrepared {
+            dictation.errorMessage = "Prepare Apple Speech in EchoType before recording with Apple Speech."
+            return
+        }
+        if backend != .appleSpeech, modelDirectory == nil {
+            dictation.errorMessage = "The selected local model is not installed or failed verification. Reinstall it from Speech Models."
+            return
+        }
         dismissOverlayTask?.cancel()
         deliveryMessage = nil
         capturedInsertionTarget = textInsertion.captureTarget()
-        await dictation.startRecording()
+        let languageIdentifier = UserDefaults.standard.string(forKey: "EchoType.transcriptionLanguage")
+            ?? Locale.current.identifier
+        await dictation.startRecording(
+            backend: backend,
+            modelDirectory: modelDirectory,
+            languageIdentifier: languageIdentifier
+        )
         if !dictation.isRecording {
             capturedInsertionTarget = nil
         }
@@ -74,6 +106,13 @@ final class EchoTypeRuntime {
             overlayModel.phase = .finishing
             overlayWindow.show()
             await dictation.stopAndTranscribe()
+            guard !dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                deliveryMessage = dictation.errorMessage ?? "No speech was recognized; nothing was inserted."
+                capturedInsertionTarget = nil
+                isDeliveringTranscript = false
+                synchronizeOverlay(with: dictation)
+                return
+            }
             let outcome = await textInsertion.deliver(
                 dictation.transcript,
                 capturedTarget: capturedInsertionTarget,
@@ -87,10 +126,6 @@ final class EchoTypeRuntime {
             return
         }
         guard !dictation.isTranscribing else { return }
-        guard dictation.assetsPrepared else {
-            dictation.errorMessage = "Prepare Apple Speech in EchoType before using the global hotkey."
-            return
-        }
         await startRecording()
     }
 

@@ -1,4 +1,5 @@
 import AppKit
+import EchoTypeCore
 import SwiftUI
 
 struct SpeechDictationPanel: View {
@@ -28,7 +29,7 @@ struct SpeechDictationPanel: View {
                     actionButton
                 }
 
-                Text("First use may download Apple’s system-managed speech assets after you choose Prepare. Live words are provisional; after you stop, a higher-quality local pass replaces them. Temporary audio is deleted when transcription finishes.")
+                Text("Apple Speech needs its system assets prepared once. Parakeet and Whisper use only their downloaded local model files. Live words are available with Apple Speech; all backends delete temporary audio when transcription finishes.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -150,15 +151,7 @@ struct SpeechDictationPanel: View {
                     Label("Stop and Transcribe", systemImage: "stop.fill")
                 }
                 .buttonStyle(.borderedProminent)
-            } else if dictation.assetsPrepared {
-                Button {
-                    Task { await runtime.startRecording() }
-                } label: {
-                    Label("Start Dictation", systemImage: "mic.fill")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(dictation.isPreparingAssets || dictation.isTranscribing)
-            } else {
+            } else if needsApplePreparation {
                 Button {
                     Task { await dictation.prepareAppleSpeech() }
                 } label: {
@@ -166,14 +159,47 @@ struct SpeechDictationPanel: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(dictation.isPreparingAssets || dictation.isTranscribing)
+            } else {
+                Button {
+                    Task { await runtime.startRecording() }
+                } label: {
+                    Label("Start Dictation", systemImage: "mic.fill")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(dictation.isPreparingAssets || dictation.isTranscribing || !canStartRecording)
             }
+        }
+    }
+
+    private var selectedBackend: TranscriptionBackend? {
+        guard let catalog = runtime.modelLibrary.catalog else { return nil }
+        return TranscriptionBackend.resolve(
+            engineID: runtime.modelLibrary.selectedEngineID,
+            catalog: catalog,
+            installedDownloadIDs: runtime.modelLibrary.installedDownloadIDs
+        )
+    }
+
+    private var needsApplePreparation: Bool {
+        selectedBackend == .appleSpeech && !dictation.assetsPrepared
+    }
+
+    private var canStartRecording: Bool {
+        switch selectedBackend {
+        case .some(.appleSpeech):
+            dictation.assetsPrepared
+        case .some(.parakeetV3), .some(.whisperLargeV3Turbo):
+            runtime.modelLibrary.installedModelDirectory(for: runtime.modelLibrary.selectedEngineID) != nil
+        case .some(.unavailable), .none:
+            false
         }
     }
 
     private var statusTitle: String {
         if dictation.isRecording { return "Listening" }
         if dictation.isTranscribing { return "Finishing transcription" }
-        if dictation.assetsPrepared { return "Ready" }
-        return "Apple Speech setup required"
+        if canStartRecording { return "Ready" }
+        if needsApplePreparation { return "Apple Speech setup required" }
+        return "Selected model unavailable"
     }
 }

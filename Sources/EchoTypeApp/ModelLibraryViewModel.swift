@@ -46,8 +46,14 @@ final class ModelLibraryViewModel {
     }
 
     func isReady(_ engine: ModelEngine) -> Bool {
-        guard let downloadID = engine.downloadId else { return true }
-        return installedDownloadIDs.contains(downloadID)
+        guard let downloadId = engine.downloadId else { return true }
+        return installedDownloadIDs.contains(downloadId)
+    }
+
+    func installedModelDirectory(for engineID: String) -> URL? {
+        guard let catalog,
+              let download = catalog.download(forEngineID: engineID) else { return nil }
+        return installer.installedURL(for: download)
     }
 
     func download(for engine: ModelEngine) -> ModelDownload? {
