@@ -116,8 +116,8 @@ final class TextInsertionService {
         let system = AXUIElementCreateSystemWide()
         var focusedValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focusedValue) == .success,
-              let focusedValue,
-              let focusedElement = focusedValue as? AXUIElement else { return nil }
+              let focusedValue else { return nil }
+        let focusedElement = focusedValue as! AXUIElement
 
         let role = accessibilityString(kAXRoleAttribute, of: focusedElement)
         let subrole = accessibilityString(kAXSubroleAttribute, of: focusedElement)
