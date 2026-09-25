@@ -97,6 +97,26 @@ private struct RecordingOverlayView: View {
     @State private var isExpanded = false
 
     var body: some View {
+        accessibleLayout
+    }
+
+    private var accessibleLayout: some View {
+        messageObservedLayout
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var messageObservedLayout: some View {
+        phaseObservedLayout
+            .onChange(of: model.deliveryMessage) { _, message in
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+                    isExpanded = model.phase == .recording || model.phase == .finishing
+                        || (model.phase == .done && message != nil)
+                }
+            }
+    }
+
+    private var phaseObservedLayout: some View {
         baseLayout
             .onChange(of: model.phase, initial: true) { _, phase in
                 withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
@@ -104,14 +124,6 @@ private struct RecordingOverlayView: View {
                         || (phase == .done && model.deliveryMessage != nil)
                 }
             }
-            .onChange(of: model.deliveryMessage) { _, message in
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
-                    isExpanded = model.phase == .recording || model.phase == .finishing
-                        || (model.phase == .done && message != nil)
-                }
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(accessibilityLabel)
     }
 
     private var baseLayout: some View {
