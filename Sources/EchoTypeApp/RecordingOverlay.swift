@@ -144,7 +144,21 @@ private struct RecordingOverlayView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("EchoType \(title). \(model.showLiveWords ? model.transcript : "") \(model.deliveryMessage ?? "") \(model.deliveryDebugInfo ?? "")")
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        var components = ["EchoType \\(title)."]
+        if model.showLiveWords && !model.transcript.isEmpty {
+            components.append(model.transcript)
+        }
+        if let deliveryMessage = model.deliveryMessage, !deliveryMessage.isEmpty {
+            components.append(deliveryMessage)
+        }
+        if let deliveryDebugInfo = model.deliveryDebugInfo, !deliveryDebugInfo.isEmpty {
+            components.append(deliveryDebugInfo)
+        }
+        return components.joined(separator: " ")
     }
 
     private var expandedContent: some View {

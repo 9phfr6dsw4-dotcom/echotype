@@ -357,6 +357,8 @@ final class TextInsertionService {
             "The frontmost app could not be verified at dictation stop or delivery time."
         case .targetChanged:
             "The frontmost app changed between dictation stop and paste."
+        case .secureField:
+            "The focused field is marked as secure, so pasting is disabled."
         case .excludedApplication:
             "The frontmost app is excluded by EchoType's app policy."
         }
