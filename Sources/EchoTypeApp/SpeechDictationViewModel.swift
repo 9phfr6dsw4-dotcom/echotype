@@ -169,10 +169,16 @@ final class SpeechDictationViewModel {
                 try await analyzer.setContext(context)
             }
             try await analyzer.start(inputSequence: inputSequence)
-            inputNode.installTap(onBus: 0, bufferSize: 2_048, format: inputFormat) { buffer, _ in
+            let tapHandler = AudioTapHandlerFactory.make { buffer in
                 writer.write(buffer)
                 bridge.append(buffer)
             }
+            inputNode.installTap(
+                onBus: 0,
+                bufferSize: 2_048,
+                format: inputFormat,
+                block: tapHandler
+            )
             tapInstalled = true
             engine.prepare()
             try engine.start()
@@ -229,9 +235,15 @@ final class SpeechDictationViewModel {
         var tapInstalled = false
         do {
             let writer = try AudioFileWriter(url: url, settings: inputFormat.settings)
-            inputNode.installTap(onBus: 0, bufferSize: 2_048, format: inputFormat) { buffer, _ in
+            let tapHandler = AudioTapHandlerFactory.make { buffer in
                 writer.write(buffer)
             }
+            inputNode.installTap(
+                onBus: 0,
+                bufferSize: 2_048,
+                format: inputFormat,
+                block: tapHandler
+            )
             tapInstalled = true
             engine.prepare()
             try engine.start()
