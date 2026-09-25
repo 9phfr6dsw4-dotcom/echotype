@@ -97,26 +97,30 @@ private struct RecordingOverlayView: View {
     @State private var isExpanded = false
 
     var body: some View {
+        baseLayout
+            .onChange(of: model.phase, initial: true) { _, phase in
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+                    isExpanded = phase == .recording || phase == .finishing
+                        || (phase == .done && model.deliveryMessage != nil)
+                }
+            }
+            .onChange(of: model.deliveryMessage) { _, message in
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+                    isExpanded = model.phase == .recording || model.phase == .finishing
+                        || (model.phase == .done && message != nil)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var baseLayout: some View {
         ZStack(alignment: .top) {
             if model.phase != .idle {
                 overlayPanel
             }
         }
         .frame(width: 520, height: 205, alignment: .top)
-        .onChange(of: model.phase, initial: true) { _, phase in
-            withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
-                isExpanded = phase == .recording || phase == .finishing
-                    || (phase == .done && model.deliveryMessage != nil)
-            }
-        }
-        .onChange(of: model.deliveryMessage) { _, message in
-            withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
-                isExpanded = model.phase == .recording || model.phase == .finishing
-                    || (model.phase == .done && message != nil)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityLabel)
     }
 
     private var overlayPanel: some View {
