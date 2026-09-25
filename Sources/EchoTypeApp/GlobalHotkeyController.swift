@@ -10,8 +10,11 @@ final class GlobalHotkeyController {
     private(set) var hasAccessibilityPermission = AXIsProcessTrusted()
     private(set) var statusMessage = "Enable the global hotkey to dictate from any app."
     private(set) var selectedKeyCode: UInt16
+    private(set) var selectedMode: ModifierHotkeyMode
 
     var onToggleRecording: (@MainActor () -> Void)?
+    var onStartRecording: (@MainActor () -> Void)?
+    var onStopRecording: (@MainActor () -> Void)?
 
     @ObservationIgnored private var globalMonitor: Any?
     @ObservationIgnored private var localMonitor: Any?
@@ -19,23 +22,31 @@ final class GlobalHotkeyController {
     @ObservationIgnored private let defaults: UserDefaults
 
     private static let keyCodeDefaultsKey = "EchoType.globalHotkeyKeyCode"
+    private static let modeDefaultsKey = "EchoType.globalHotkeyMode"
     private static let controlKeyCode: UInt16 = 59
     private static let rightOptionKeyCode: UInt16 = 61
+    private static let functionKeyCode: UInt16 = 63
     private static let relevantModifiers: NSEvent.ModifierFlags = [.control, .option, .command, .shift, .function]
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        selectedMode = ModifierHotkeyMode(rawValue: defaults.string(forKey: Self.modeDefaultsKey) ?? "") ?? .tapToToggle
         selectedKeyCode = UInt16(defaults.integer(forKey: Self.keyCodeDefaultsKey))
         if defaults.object(forKey: Self.keyCodeDefaultsKey) == nil {
             selectedKeyCode = Self.controlKeyCode
         }
-        if selectedKeyCode != Self.controlKeyCode && selectedKeyCode != Self.rightOptionKeyCode {
+        if selectedKeyCode != Self.controlKeyCode && selectedKeyCode != Self.rightOptionKeyCode && selectedKeyCode != Self.functionKeyCode {
             selectedKeyCode = Self.controlKeyCode
         }
+        recognizer = ModifierTapRecognizer(mode: selectedMode)
     }
 
     var selectedKeyName: String {
-        selectedKeyCode == Self.rightOptionKeyCode ? "Right Option" : "Left Control"
+        switch selectedKeyCode {
+        case Self.rightOptionKeyCode: "Right Option"
+        case Self.functionKeyCode: "Fn / Globe"
+        default: "Left Control"
+        }
     }
 
     func refreshPermission() {
@@ -53,10 +64,16 @@ final class GlobalHotkeyController {
     }
 
     func chooseKey(keyCode: UInt16) {
-        guard keyCode == Self.controlKeyCode || keyCode == Self.rightOptionKeyCode else { return }
+        guard keyCode == Self.controlKeyCode || keyCode == Self.rightOptionKeyCode || keyCode == Self.functionKeyCode else { return }
         selectedKeyCode = keyCode
         defaults.set(Int(keyCode), forKey: Self.keyCodeDefaultsKey)
-        recognizer = ModifierTapRecognizer()
+        recognizer = ModifierTapRecognizer(mode: selectedMode)
+    }
+
+    func chooseMode(_ mode: ModifierHotkeyMode) {
+        selectedMode = mode
+        defaults.set(mode.rawValue, forKey: Self.modeDefaultsKey)
+        recognizer = ModifierTapRecognizer(mode: mode)
     }
 
     func enable() {
@@ -88,33 +105,54 @@ final class GlobalHotkeyController {
             return
         }
         isEnabled = true
-        statusMessage = "Listening for a bare \(selectedKeyName) tap. Key combinations such as Control-C are ignored."
+        statusMessage = selectedMode == .tapToToggle
+            ? "Listening for a bare \(selectedKeyName) tap. Key combinations such as Control-C are ignored."
+            : "Hold \(selectedKeyName) to dictate; release it to finish. Modifier chords are ignored."
     }
 
     func disable() {
+        if selectedMode == .holdToTalk, isEnabled {
+            onStopRecording?()
+        }
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
         globalMonitor = nil
         localMonitor = nil
         isEnabled = false
-        recognizer = ModifierTapRecognizer()
+        recognizer = ModifierTapRecognizer(mode: selectedMode)
         statusMessage = "Global hotkey is off."
     }
 
     private func handle(isModifierChange: Bool, keyCode: UInt16, modifierFlags: UInt) {
         guard isEnabled else { return }
         guard isModifierChange else {
-            _ = recognizer.consume(.otherKeyDown)
+            dispatch(recognizer.consume(.otherKeyDown))
             return
         }
         guard keyCode == selectedKeyCode else { return }
 
         let flags = NSEvent.ModifierFlags(rawValue: modifierFlags).intersection(.deviceIndependentFlagsMask)
-        let targetModifier: NSEvent.ModifierFlags = selectedKeyCode == Self.controlKeyCode ? .control : .option
+        let targetModifier: NSEvent.ModifierFlags
+        switch selectedKeyCode {
+        case Self.rightOptionKeyCode: targetModifier = .option
+        case Self.functionKeyCode: targetModifier = .function
+        default: targetModifier = .control
+        }
         let hasOtherModifiers = !flags.subtracting(targetModifier).intersection(Self.relevantModifiers).isEmpty
         let isDown = flags.contains(targetModifier)
-        if recognizer.consume(.modifierChanged(isDown: isDown, hasOtherModifiers: hasOtherModifiers)) == .toggleRecording {
+        dispatch(recognizer.consume(.modifierChanged(isDown: isDown, hasOtherModifiers: hasOtherModifiers)))
+    }
+
+    private func dispatch(_ action: ModifierHotkeyAction?) {
+        switch action {
+        case .toggleRecording:
             onToggleRecording?()
+        case .startRecording:
+            onStartRecording?()
+        case .stopRecording:
+            onStopRecording?()
+        case nil:
+            break
         }
     }
 }

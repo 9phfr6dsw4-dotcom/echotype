@@ -28,14 +28,18 @@ final class TextInsertionService {
         let representations: [(NSPasteboard.PasteboardType, Data)]
     }
 
-    private let policy = TextInsertionPolicy()
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
 
     func captureTarget() -> CapturedInsertionTarget? {
         captureFocusedTarget()
     }
 
     func isFrontmostAppExcluded() -> Bool {
-        policy.isExcluded(bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+        currentPolicy.isExcluded(bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
     }
 
     func deliver(
@@ -54,6 +58,7 @@ final class TextInsertionService {
         } else {
             false
         }
+        let policy = currentPolicy
         let decision = policy.decision(
             captured: captured?.snapshot,
             current: current?.snapshot,
@@ -102,7 +107,7 @@ final class TextInsertionService {
     private func sameTargetIsStillFocused(_ captured: CapturedInsertionTarget?) -> Bool {
         guard let captured, let current = captureFocusedTarget() else { return false }
         guard CFEqual(captured.focusedElement, current.focusedElement) else { return false }
-        return policy.decision(
+        return currentPolicy.decision(
             captured: captured.snapshot,
             current: current.snapshot,
             sameFocusedElement: true
@@ -128,6 +133,18 @@ final class TextInsertionService {
             focusedSubrole: subrole
         )
         return CapturedInsertionTarget(snapshot: snapshot, focusedElement: focusedElement)
+    }
+
+    private var currentPolicy: TextInsertionPolicy {
+        guard let data = defaults.data(forKey: ExcludedApplicationsViewModel.defaultsKey),
+              let policy = try? JSONDecoder().decode(ExcludedAppPolicy.self, from: data) else {
+            return TextInsertionPolicy()
+        }
+        let identifiers = Set(
+            (policy.defaultExcludedApplications + policy.userExcludedApplications)
+                .map(\.bundleIdentifier)
+        )
+        return TextInsertionPolicy(excludedBundleIdentifiers: identifiers)
     }
 
     private func accessibilityString(_ attribute: String, of element: AXUIElement) -> String? {

@@ -23,6 +23,7 @@ final class SpeechDictationViewModel {
     @ObservationIgnored private var audioEngine: AVAudioEngine?
     @ObservationIgnored private var audioWriter: AudioFileWriter?
     @ObservationIgnored private var recordingURL: URL?
+    @ObservationIgnored private var completedRecordingAudioData: Data?
     @ObservationIgnored private var inputBridge: AudioAnalyzerInputBridge?
     @ObservationIgnored private var speechAnalyzer: SpeechAnalyzer?
     @ObservationIgnored private var liveResultsTask: Task<Void, Never>?
@@ -52,6 +53,7 @@ final class SpeechDictationViewModel {
         modelDirectory: URL?,
         languageIdentifier: String
     ) async {
+        completedRecordingAudioData = nil
         switch backend {
         case .appleSpeech:
             await startAppleSpeechRecording()
@@ -226,7 +228,7 @@ final class SpeechDictationViewModel {
         }
     }
 
-    func stopAndTranscribe() async {
+    func stopAndTranscribe(saveAudio: Bool = false) async {
         guard isRecording, let engine = audioEngine, let recordingURL else { return }
         isRecording = false
         isTranscribing = true
@@ -246,6 +248,9 @@ final class SpeechDictationViewModel {
         audioEngine = nil
         let writeError = audioWriter?.errorMessage
         audioWriter = nil
+        if saveAudio, writeError == nil {
+            completedRecordingAudioData = try? Data(contentsOf: recordingURL)
+        }
 
         let bridge = inputBridge
         let bridgeError = bridge?.errorMessage
@@ -309,6 +314,11 @@ final class SpeechDictationViewModel {
         }
     }
 
+    func takeCompletedRecordingAudioData() -> Data? {
+        defer { completedRecordingAudioData = nil }
+        return completedRecordingAudioData
+    }
+
     func cancelAndDiscardRecording() async {
         guard isRecording, let recordingURL else { return }
         isRecording = false
@@ -317,6 +327,7 @@ final class SpeechDictationViewModel {
         audioEngine?.stop()
         audioEngine = nil
         audioWriter = nil
+        completedRecordingAudioData = nil
         inputBridge?.finish()
         inputBridge = nil
         if let speechAnalyzer {

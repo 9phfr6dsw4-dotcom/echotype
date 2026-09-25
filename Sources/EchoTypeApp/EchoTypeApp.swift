@@ -9,7 +9,14 @@ struct EchoTypeApp: App {
 
     var body: some Scene {
         WindowGroup("EchoType") {
-            ModelLibraryView()
+            TabView {
+                HomeView()
+                    .tabItem { Label("Home", systemImage: "house") }
+                ModelLibraryView()
+                    .tabItem { Label("Speech Models", systemImage: "waveform") }
+                EchoTypeSettingsView()
+                    .tabItem { Label("Settings", systemImage: "gearshape") }
+            }
                 .environment(runtime)
                 .navigationTitle("EchoType")
         }

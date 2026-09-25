@@ -94,12 +94,22 @@ struct SpeechDictationPanel: View {
         GroupBox("Global hotkey") {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 12) {
+                    Picker("Gesture", selection: Binding(
+                        get: { runtime.hotkey.selectedMode },
+                        set: { runtime.hotkey.chooseMode($0) }
+                    )) {
+                        Text("Tap to toggle").tag(ModifierHotkeyMode.tapToToggle)
+                        Text("Hold to talk").tag(ModifierHotkeyMode.holdToTalk)
+                    }
+                    .frame(width: 220)
+
                     Picker("Tap to toggle", selection: Binding(
                         get: { runtime.hotkey.selectedKeyCode },
                         set: { runtime.hotkey.chooseKey(keyCode: $0) }
                     )) {
                         Text("Left Control").tag(UInt16(59))
                         Text("Right Option").tag(UInt16(61))
+                        Text("Fn / Globe").tag(UInt16(63))
                     }
                     .frame(width: 245)
 

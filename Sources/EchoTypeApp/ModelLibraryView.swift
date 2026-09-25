@@ -13,8 +13,6 @@ struct ModelLibraryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
-                SpeechDictationPanel()
-
                 if let startupError = library.startupError {
                     ContentUnavailableView(
                         "Model Catalog Unavailable",

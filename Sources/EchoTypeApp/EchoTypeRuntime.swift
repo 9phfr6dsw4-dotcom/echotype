@@ -8,6 +8,8 @@ import Observation
 final class EchoTypeRuntime {
     let dictation: SpeechDictationViewModel
     let modelLibrary: ModelLibraryViewModel
+    let history: TranscriptHistoryViewModel
+    let excludedApplications: ExcludedApplicationsViewModel
     let hotkey: GlobalHotkeyController
     let overlayModel: RecordingOverlayModel
     let textInsertion: TextInsertionService
@@ -19,13 +21,19 @@ final class EchoTypeRuntime {
     @ObservationIgnored private var capturedInsertionTarget: CapturedInsertionTarget?
     @ObservationIgnored private var workspaceActivationObserver: NSObjectProtocol?
     @ObservationIgnored private var isDeliveringTranscript = false
+    @ObservationIgnored private var recordingStartedAt: Date?
+    @ObservationIgnored private var recordingEngineID: String?
 
     init() {
         let dictation = SpeechDictationViewModel()
         let modelLibrary = ModelLibraryViewModel()
+        let history = TranscriptHistoryViewModel()
+        let excludedApplications = ExcludedApplicationsViewModel()
         let overlayModel = RecordingOverlayModel()
         self.dictation = dictation
         self.modelLibrary = modelLibrary
+        self.history = history
+        self.excludedApplications = excludedApplications
         self.overlayModel = overlayModel
         self.hotkey = GlobalHotkeyController()
         self.textInsertion = TextInsertionService()
@@ -37,6 +45,16 @@ final class EchoTypeRuntime {
         hotkey.onToggleRecording = { [weak self] in
             Task { @MainActor [weak self] in
                 await self?.toggleRecording()
+            }
+        }
+        hotkey.onStartRecording = { [weak self] in
+            Task { @MainActor [weak self] in
+                await self?.startRecording()
+            }
+        }
+        hotkey.onStopRecording = { [weak self] in
+            Task { @MainActor [weak self] in
+                await self?.stopAndDeliverRecording()
             }
         }
         workspaceActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -91,42 +109,68 @@ final class EchoTypeRuntime {
             modelDirectory: modelDirectory,
             languageIdentifier: languageIdentifier
         )
-        if !dictation.isRecording {
+        if dictation.isRecording {
+            recordingStartedAt = Date()
+            recordingEngineID = engineID
+        } else {
             capturedInsertionTarget = nil
         }
     }
 
     func toggleRecording() async {
         if dictation.isRecording {
-            if textInsertion.isFrontmostAppExcluded() {
-                await discardRecordingInExcludedApp()
-                return
+            await stopAndDeliverRecording()
+            return
+        }
+        guard !dictation.isTranscribing else { return }
+        await startRecording()
+    }
+
+    func stopAndDeliverRecording() async {
+        guard dictation.isRecording else { return }
+        if textInsertion.isFrontmostAppExcluded() {
+            await discardRecordingInExcludedApp()
+            recordingStartedAt = nil
+            recordingEngineID = nil
+            return
+        }
+        isDeliveringTranscript = true
+        overlayModel.phase = .finishing
+        overlayWindow.show()
+        await dictation.stopAndTranscribe(saveAudio: history.settings.historyEnabled && history.settings.saveAudio)
+        let duration = max(0, Date().timeIntervalSince(recordingStartedAt ?? Date()))
+        recordingStartedAt = nil
+        let audioData = dictation.takeCompletedRecordingAudioData()
+        if !dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            do {
+                try history.saveTranscript(
+                    dictation.transcript,
+                    duration: duration,
+                    modelID: recordingEngineID ?? modelLibrary.selectedEngineID,
+                    audioData: audioData
+                )
+            } catch {
+                history.errorMessage = "Transcript was recognized but history could not be saved: \(error.localizedDescription)"
             }
-            isDeliveringTranscript = true
-            overlayModel.phase = .finishing
-            overlayWindow.show()
-            await dictation.stopAndTranscribe()
-            guard !dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                deliveryMessage = dictation.errorMessage ?? "No speech was recognized; nothing was inserted."
-                capturedInsertionTarget = nil
-                isDeliveringTranscript = false
-                synchronizeOverlay(with: dictation)
-                return
-            }
-            let outcome = await textInsertion.deliver(
-                dictation.transcript,
-                capturedTarget: capturedInsertionTarget,
-                copyToClipboard: UserDefaults.standard.bool(forKey: "EchoType.copyToClipboard"),
-                autoSend: UserDefaults.standard.bool(forKey: "EchoType.autoSend")
-            )
-            deliveryMessage = Self.message(for: outcome)
+        }
+        recordingEngineID = nil
+        guard !dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            deliveryMessage = dictation.errorMessage ?? "No speech was recognized; nothing was inserted."
             capturedInsertionTarget = nil
             isDeliveringTranscript = false
             synchronizeOverlay(with: dictation)
             return
         }
-        guard !dictation.isTranscribing else { return }
-        await startRecording()
+        let outcome = await textInsertion.deliver(
+            dictation.transcript,
+            capturedTarget: capturedInsertionTarget,
+            copyToClipboard: UserDefaults.standard.bool(forKey: "EchoType.copyToClipboard"),
+            autoSend: UserDefaults.standard.bool(forKey: "EchoType.autoSend")
+        )
+        deliveryMessage = Self.message(for: outcome)
+        capturedInsertionTarget = nil
+        isDeliveringTranscript = false
+        synchronizeOverlay(with: dictation)
     }
 
     private func discardRecordingInExcludedApp() async {
