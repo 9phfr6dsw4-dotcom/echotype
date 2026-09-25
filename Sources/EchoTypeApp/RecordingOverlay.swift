@@ -94,47 +94,31 @@ final class RecordingOverlayWindowController {
 
 private struct RecordingOverlayView: View {
     let model: RecordingOverlayModel
-    @State private var isExpanded = false
+
+    private var isExpanded: Bool {
+        model.phase == .recording || model.phase == .finishing
+            || (model.phase == .done && model.deliveryMessage != nil)
+    }
 
     var body: some View {
         accessibleLayout
     }
 
     private var accessibleLayout: some View {
-        messageObservedLayout
+        baseLayout
             .accessibilityElement(children: .combine)
             .accessibilityLabel(accessibilityLabel)
     }
 
-    private var messageObservedLayout: some View {
-        phaseObservedLayout
-            .onChange(of: model.deliveryMessage) { _, message in
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
-                    isExpanded = model.phase == .recording || model.phase == .finishing
-                        || (model.phase == .done && message != nil)
-                }
+    private var baseLayout: some View {
+        ZStack(alignment: .top) {
+            if model.phase != .idle {
+                overlayPanel
             }
-    }
-
-    private var phaseObservedLayout: some View {
-        baseLayout
-            .onChange(of: model.phase, initial: true) { _, phase in
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
-                    isExpanded = phase == .recording || phase == .finishing
-                        || (phase == .done && model.deliveryMessage != nil)
-                }
-            }
-    }
-
-    private var baseLayout: AnyView {
-        AnyView(
-            ZStack(alignment: .top) {
-                if model.phase != .idle {
-                    overlayPanel
-                }
-            }
-            .frame(width: 520, height: 205, alignment: .top)
-        )
+        }
+        .frame(width: 520, height: 205, alignment: .top)
+        .animation(.spring(response: 0.34, dampingFraction: 0.84), value: model.phase)
+        .animation(.spring(response: 0.34, dampingFraction: 0.84), value: model.deliveryMessage)
     }
 
     private var overlayPanel: some View {
