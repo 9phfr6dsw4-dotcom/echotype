@@ -126,13 +126,15 @@ private struct RecordingOverlayView: View {
             }
     }
 
-    private var baseLayout: some View {
-        ZStack(alignment: .top) {
-            if model.phase != .idle {
-                overlayPanel
+    private var baseLayout: AnyView {
+        AnyView(
+            ZStack(alignment: .top) {
+                if model.phase != .idle {
+                    overlayPanel
+                }
             }
-        }
-        .frame(width: 520, height: 205, alignment: .top)
+            .frame(width: 520, height: 205, alignment: .top)
+        )
     }
 
     private var overlayPanel: some View {
