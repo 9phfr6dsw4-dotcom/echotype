@@ -101,7 +101,7 @@ struct LocalModelTranscriber {
             variant: .ctc06b
         )
         let vocabulary = CustomVocabularyContext(
-            terms: vocabularyTerms.map { FluidAudio.CustomVocabularyTerm(text: $0) }
+            terms: vocabularyTerms.map { CustomVocabularyTerm(text: $0) }
         )
         let boosting = try await VocabularyBoostingSession(
             vocabulary: vocabulary,

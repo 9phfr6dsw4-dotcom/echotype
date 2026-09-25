@@ -49,7 +49,7 @@ final class RecordingFeedbackController {
     private func applyRecordingDockIcon() {
         guard originalDockIcon == nil else { return }
         let application = NSApplication.shared
-        let original = application.applicationIconImage
+        guard let original = application.applicationIconImage else { return }
         originalDockIcon = original
 
         let image = NSImage(size: original.size)

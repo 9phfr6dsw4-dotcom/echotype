@@ -91,7 +91,7 @@ public struct AppleSpeechTranscriber: Sendable {
     public static func analysisContext(for phrases: [String]) -> AnalysisContext? {
         let boundedPhrases = Array(phrases.prefix(TranscriptionVocabulary.applePhraseLimit))
         guard !boundedPhrases.isEmpty else { return nil }
-        var context = AnalysisContext()
+        let context = AnalysisContext()
         context.contextualStrings[.general] = boundedPhrases
         return context
     }

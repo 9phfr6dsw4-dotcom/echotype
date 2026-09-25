@@ -139,9 +139,9 @@ final class RecordingAudioOptionsController {
         switch runAppleScript(source) {
         case .success(let result):
             switch result {
-            case "paused": .paused
-            case "not_playing": .notPlaying
-            default: .failed("the player returned an unrecognized playback state.")
+            case "paused": return .paused
+            case "not_playing": return .notPlaying
+            default: return .failed("the player returned an unrecognized playback state.")
             }
         case .failure(let reason):
             return .failed(reason)
@@ -167,9 +167,9 @@ final class RecordingAudioOptionsController {
         switch runAppleScript(source) {
         case .success(let result):
             switch result {
-            case "resumed": .resumed
-            case "not_paused": .notPaused
-            default: .failed("the player returned an unrecognized playback state.")
+            case "resumed": return .resumed
+            case "not_paused": return .notPaused
+            default: return .failed("the player returned an unrecognized playback state.")
             }
         case .failure(let reason):
             return .failed(reason)

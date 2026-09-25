@@ -85,8 +85,8 @@ final class ModelLibraryViewModel {
     func download(engineID: String) async {
         guard let catalog,
               let engine = catalog.engine(id: engineID),
-              let download = download(for: engine) else { return }
-        await download(downloadID: download.id)
+              let artifact = download(for: engine) else { return }
+        await download(downloadID: artifact.id)
     }
 
     func download(downloadID: String) async {
