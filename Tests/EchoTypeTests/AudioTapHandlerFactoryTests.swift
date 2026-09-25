@@ -23,7 +23,7 @@ final class AudioTapHandlerFactoryTests: XCTestCase {
     }
 
     private func invokeOnBackgroundQueue(
-        _ handler: AudioTapHandlerFactory.Handler,
+        _ handler: @escaping AudioTapHandlerFactory.Handler,
         probe: TapCallbackProbe
     ) throws {
         DispatchQueue.global(qos: .userInitiated).async {
