@@ -29,4 +29,26 @@ final class ModifierTapRecognizerTests: XCTestCase {
 
         XCTAssertNil(recognizer.consume(.modifierChanged(isDown: false, hasOtherModifiers: false)))
     }
+
+    func testHoldToTalkStartsOnPressAndStopsOnRelease() {
+        var recognizer = ModifierTapRecognizer(mode: .holdToTalk)
+
+        XCTAssertEqual(recognizer.consume(.modifierChanged(isDown: true, hasOtherModifiers: false)), .startRecording)
+        XCTAssertEqual(recognizer.consume(.modifierChanged(isDown: false, hasOtherModifiers: false)), .stopRecording)
+    }
+
+    func testHoldToTalkChordStopsAndDoesNotRestartOnRelease() {
+        var recognizer = ModifierTapRecognizer(mode: .holdToTalk)
+
+        XCTAssertEqual(recognizer.consume(.modifierChanged(isDown: true, hasOtherModifiers: false)), .startRecording)
+        XCTAssertEqual(recognizer.consume(.otherKeyDown), .stopRecording)
+        XCTAssertNil(recognizer.consume(.modifierChanged(isDown: false, hasOtherModifiers: false)))
+    }
+
+    func testHoldToTalkDoesNotStartWhenPressedWithAnotherModifier() {
+        var recognizer = ModifierTapRecognizer(mode: .holdToTalk)
+
+        XCTAssertNil(recognizer.consume(.modifierChanged(isDown: true, hasOtherModifiers: true)))
+        XCTAssertNil(recognizer.consume(.modifierChanged(isDown: false, hasOtherModifiers: false)))
+    }
 }
