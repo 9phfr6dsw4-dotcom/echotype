@@ -30,3 +30,4 @@ final class PreparedSpeechLocalePolicyTests: XCTestCase {
             requestedIdentifier: "zh-Hans-SG"
         ))
     }
+}
