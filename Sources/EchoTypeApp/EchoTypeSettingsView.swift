@@ -312,65 +312,13 @@ struct EchoTypeSettingsView: View {
         }
     }
 
-    private var parakeetVocabularyStatus: some View {
-        let isAvailable = modelLibrary.optionalDownload(forEngineID: ModelSelection.parakeetEngineID) != nil
-        let isInstalled = modelLibrary.isParakeetVocabularyInstalled
-        let isDownloading = modelLibrary.isParakeetVocabularyDownloading
-        let progress = modelLibrary.parakeetVocabularyProgress
-        let parakeetInstalled = modelLibrary.isParakeetInstalled
-
-        return VStack(alignment: .leading, spacing: 6) {
-            if !isAvailable {
-                Label("Parakeet CTC companion status unavailable.", systemImage: "questionmark.circle")
-                    .foregroundStyle(.secondary)
-            } else {
-                Label(
-                    modelLibrary.parakeetVocabularyStatus,
-                    systemImage: isInstalled ? "checkmark.circle.fill" : isDownloading ? "arrow.down.circle" : "info.circle"
-                )
-                .foregroundStyle(isInstalled ? .green : .secondary)
-                .textSelection(.enabled)
-            }
-
-            if isDownloading, let progress {
-                ProgressView(
-                    value: Double(progress.verifiedBytes),
-                    total: Double(max(progress.totalBytes, 1))
-                )
-                Text("Verified \(progress.verifiedFileCount) of \(progress.fileCount) companion files")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if !isInstalled, !isDownloading, parakeetInstalled {
-                let label = modelLibrary.parakeetVocabularyErrorMessage == nil
-                    ? "Download optional vocabulary add-on (2.37 GB)"
-                    : "Retry vocabulary add-on download"
-                Button(label) {
-                    Task { await modelLibrary.downloadParakeetVocabularyCompanion() }
-                }
-                .buttonStyle(.bordered)
-            }
-
-            if let errorMessage = modelLibrary.parakeetVocabularyErrorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .textSelection(.enabled)
-            }
-        }
-        .font(.caption)
-    }
-
     private var customVocabularySettings: some View {
         GroupBox("Custom vocabulary") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Add names and unusual words to bias supported local speech engines. Apple Speech uses up to 100 contextual phrases; Whisper uses decoder prompt tokens. Parakeet's optional 2.37 GB CTC companion adds contextual rescoring. It is included when you explicitly download Parakeet with the combined size shown first; if Parakeet is already installed, use the separate Download optional vocabulary add-on button here. Adding or editing a term never starts a download. Missing or failed companion downloads disable only custom-vocabulary rescoring; base Parakeet transcripts continue.")
+                Text("Add names and unusual words to bias supported local speech engines. Apple Speech uses up to 100 contextual phrases; Whisper uses decoder prompt tokens; Parakeet uses CTC contextual rescoring. Parakeet's vocabulary files are included in its model installation and are removed with it. Adding or editing a term never starts a download.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-
-                parakeetVocabularyStatus
 
                 HStack {
                     TextField("Name or unusual word", text: $newVocabularyTerm)

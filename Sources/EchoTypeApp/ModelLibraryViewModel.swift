@@ -11,7 +11,6 @@ final class ModelLibraryViewModel {
     private(set) var installedDownloadIDs: Set<String> = []
     private(set) var activeDownloadIDs: Set<String> = []
     private(set) var progressByDownloadID: [String: ModelInstallProgress] = [:]
-    private(set) var parakeetVocabularyErrorMessage: String?
     var errorMessage: String?
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -70,41 +69,29 @@ final class ModelLibraryViewModel {
         return catalog?.download(id: downloadID)
     }
 
-    func optionalDownload(forEngineID engineID: String) -> ModelDownload? {
-        catalog?.downloads.first { $0.engineId == engineID && $0.optional }
+    func isInstallationComplete(engineID: String) -> Bool {
+        guard let catalog else { return false }
+        let downloads = ModelDownloadPlan.downloadsForEngine(engineID: engineID, catalog: catalog)
+        return downloads.allSatisfy { installedDownloadIDs.contains($0.id) }
     }
 
-    var isParakeetInstalled: Bool {
-        guard let engine = catalog?.engine(id: ModelSelection.parakeetEngineID) else { return false }
-        return isReady(engine)
+    func hasInstalledFiles(engineID: String) -> Bool {
+        guard let catalog else { return false }
+        return ModelDownloadPlan.downloadsForEngine(engineID: engineID, catalog: catalog)
+            .contains { installedDownloadIDs.contains($0.id) }
     }
 
-    var isParakeetVocabularyInstalled: Bool {
-        installedDownloadIDs.contains(Self.parakeetVocabularyDownloadID)
+    func isDownloading(engineID: String) -> Bool {
+        guard let catalog else { return false }
+        return ModelDownloadPlan.downloadsForEngine(engineID: engineID, catalog: catalog)
+            .contains { activeDownloadIDs.contains($0.id) }
     }
 
-    var isParakeetVocabularyDownloading: Bool {
-        activeDownloadIDs.contains(Self.parakeetVocabularyDownloadID)
-    }
-
-    var parakeetVocabularyProgress: ModelInstallProgress? {
-        progressByDownloadID[Self.parakeetVocabularyDownloadID]
-    }
-
-    var parakeetVocabularyStatus: String {
-        if isParakeetVocabularyInstalled {
-            return "Installed and checksum-verified on this Mac."
-        }
-        if isParakeetVocabularyDownloading {
-            return "Downloading and verifying the vocabulary add-on…"
-        }
-        if let parakeetVocabularyErrorMessage {
-            return "Download failed: \(parakeetVocabularyErrorMessage)"
-        }
-        if isParakeetInstalled {
-            return "Not installed. Download it explicitly here or remove and reinstall Parakeet with the add-on."
-        }
-        return "Included with the next Parakeet download."
+    func downloadProgress(engineID: String) -> ModelInstallProgress? {
+        guard let catalog else { return nil }
+        let activeID = ModelDownloadPlan.downloadsForEngine(engineID: engineID, catalog: catalog)
+            .first { activeDownloadIDs.contains($0.id) }?.id
+        return activeID.flatMap { progressByDownloadID[$0] }
     }
 
     func initialInstallSize(forEngineID engineID: String) -> Int {
@@ -138,12 +125,6 @@ final class ModelLibraryViewModel {
             guard installedDownloadIDs.contains(artifact.id) else { return }
         }
     }
-
-    func downloadParakeetVocabularyCompanion() async {
-        guard isParakeetInstalled, !isParakeetVocabularyInstalled else { return }
-        await download(downloadID: Self.parakeetVocabularyDownloadID)
-    }
-
     func download(downloadID: String) async {
         guard let download = catalog?.download(id: downloadID),
               !installedDownloadIDs.contains(download.id),
@@ -151,9 +132,6 @@ final class ModelLibraryViewModel {
 
         let downloadInstaller = installer(for: download)
         errorMessage = nil
-        if downloadID == Self.parakeetVocabularyDownloadID {
-            parakeetVocabularyErrorMessage = nil
-        }
         defer {
             activeDownloadIDs.remove(downloadID)
             progressByDownloadID.removeValue(forKey: downloadID)
@@ -166,26 +144,21 @@ final class ModelLibraryViewModel {
                 }
             }
             installedDownloadIDs.insert(downloadID)
-            if downloadID == Self.parakeetVocabularyDownloadID {
-                parakeetVocabularyErrorMessage = nil
-            }
             refreshSelection()
         } catch {
             errorMessage = error.localizedDescription
-            if downloadID == Self.parakeetVocabularyDownloadID {
-                parakeetVocabularyErrorMessage = error.localizedDescription
-            }
         }
     }
 
     func remove(engineID: String) throws {
         guard let catalog,
-              let engine = catalog.engine(id: engineID),
-              let download = download(for: engine) else { return }
+              catalog.engine(id: engineID) != nil else { return }
         if selectedEngineID == engineID {
             select(engineID: ModelSelection.appleSpeechEngineID)
         }
-        try remove(downloadID: download.id)
+        for downloadID in ModelDownloadPlan.downloadIDsForRemoval(engineID: engineID, catalog: catalog) {
+            try remove(downloadID: downloadID)
+        }
     }
 
     func remove(downloadID: String) throws {

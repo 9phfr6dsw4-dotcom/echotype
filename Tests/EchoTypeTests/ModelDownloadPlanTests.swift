@@ -2,6 +2,29 @@ import XCTest
 @testable import EchoTypeCore
 
 final class ModelDownloadPlanTests: XCTestCase {
+    func testParakeetIsOneRequiredEngineInstallIncludingVocabulary() throws {
+        let catalog = try ModelCatalogTestSupport.catalog()
+
+        let downloads = ModelDownloadPlan.downloadsForEngine(
+            engineID: ModelSelection.parakeetEngineID,
+            catalog: catalog
+        )
+
+        XCTAssertEqual(downloads.map(\.id), ["parakeet-v3", "parakeet-ctc-0.6b-coreml"])
+        XCTAssertTrue(downloads.allSatisfy { !$0.optional })
+    }
+
+    func testDeletingParakeetRemovesItsModelAndVocabularyDownloads() throws {
+        let catalog = try ModelCatalogTestSupport.catalog()
+
+        let downloadIDs = ModelDownloadPlan.downloadIDsForRemoval(
+            engineID: ModelSelection.parakeetEngineID,
+            catalog: catalog
+        )
+
+        XCTAssertEqual(downloadIDs, ["parakeet-v3", "parakeet-ctc-0.6b-coreml"])
+    }
+
     func testFirstParakeetDownloadIncludesModelAndVocabularyCompanionInTotal() throws {
         let catalog = try ModelCatalogTestSupport.catalog()
         let downloads = ModelDownloadPlan.downloadsForExplicitInstall(

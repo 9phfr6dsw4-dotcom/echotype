@@ -71,7 +71,11 @@ struct LocalModelTranscriber {
             language = nil
         }
 
-        let models = try AsrModels.loadLocal(from: modelDirectory, version: .v3)
+        let models = try AsrModels.loadLocal(
+            from: modelDirectory,
+            version: .v3,
+            encoderPrecision: .int8V2
+        )
         let manager = AsrManager(config: .default, models: models)
         var decoderState = try TdtDecoderState()
         let result = try await manager.transcribe(
@@ -141,6 +145,7 @@ struct LocalModelTranscriber {
             modelFolder: modelDirectory.path,
             tokenizerFolder: modelDirectory,
             verbose: false,
+            prewarm: true,
             load: true,
             download: false,
             useBackgroundDownloadSession: false

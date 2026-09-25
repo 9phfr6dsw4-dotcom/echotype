@@ -20,7 +20,7 @@
       ],
       "speedNote": "Streaming Core ML; M5 Air speed is measured locally after use",
       "accuracyNote": "User-preferred engine; compare on the same recording",
-      "vocabularySupport": "Optional CTC contextual-rescoring bundle"
+      "vocabularySupport": "CTC contextual rescoring included with this model"
     },
     {
       "id": "whisper-large-v3-turbo",
@@ -233,7 +233,7 @@
     {
       "id": "parakeet-ctc-0.6b-coreml",
       "engineId": "parakeet-v3",
-      "optional": true,
+      "optional": false,
       "bytes": 2374186501,
       "license": "CC-BY-4.0 original NVIDIA model; conversion repository does not declare a license field",
       "sources": [

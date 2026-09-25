@@ -43,9 +43,9 @@ The encoder, decoder, joint-decision, and preprocessor weight entries have pinne
 
 FluidAudio supports streaming transcription and vocabulary rescoring.[54]
 
-The optional CTC companion is **2,373,826,395 bytes** across 9 files, and the upstream NVIDIA CTC model is CC-BY-4.0.[30][51][52]
+The CTC vocabulary-rescoring files are **2,374,186,501 bytes** across 10 files, and the upstream NVIDIA CTC model is CC-BY-4.0.[30][51][52]
 
-Its conversion repository does not declare a license field, so the add-on will remain optional and EchoType will attribute both source and converter.[31][32][55]
+Its conversion repository does not declare a license field, so EchoType attributes both source and converter.[31][32][55]
 
 ### Whisper large-v3-turbo
 
@@ -59,7 +59,7 @@ Six tokenizer assets from OpenAI revision `41f01f3fe87f28c78e2fbf8b568835947dd65
 
 WhisperKit v1.1.0 supports `promptTokens` for decoder context and live streaming from a selectable input device.[57][58]
 
-It searches supplied local folders for `tokenizer.json` before falling back to the Hub; EchoType will bundle the pinned tokenizer and set `download: false`.[56][58]
+It searches supplied local folders for `tokenizer.json` before falling back to the Hub; EchoType bundles the pinned tokenizer and sets `download: false`.[56][58]
 
 The current FluidAudio main-branch loader and streaming/vocabulary implementation were cross-checked against the pinned release APIs.[40][41][42]
 
@@ -75,7 +75,7 @@ Large Hugging Face LFS files expose publisher SHA-256 object IDs; EchoType will 
 
 Downloads begin only after the user presses **Download**, the UI shows the exact byte total first, and any size/hash mismatch blocks installation.
 
-The Parakeet TDT decoder itself is not described as having a custom lexicon; its vocabulary-rescoring path uses the separate CTC companion.[54][55]
+The Parakeet TDT decoder itself is not described as having a custom lexicon; its vocabulary-rescoring path uses the CTC model files installed with Parakeet.[54][55]
 
 Whisper uses decoder prompt tokens and Apple exposes contextual strings.[9][58]
 
@@ -99,10 +99,10 @@ The UI will distinguish these mechanisms from post-transcription spelling correc
 | App presence | Keep a normal Dock icon and a reopenable settings/history window. |
 | Storage | Audio stays in memory by default; optional audio saving is off initially. Local transcript history defaults to 30 days, with 7 days, 90 days, and forever choices. Retention never deletes learned terms. |
 | Learning | Transcript-history edits remain explicit and require at least three matching corrections; short common words are ignored, and the optional confirmation setting remains off by default. A separate opt-in setting, off by default, can learn corrections made to a recent EchoType paste: observe only the captured text field for at most 10 seconds, require selected/value AX notifications and valid UTF-16 range/count/caret metadata, debounce value changes for 800 ms, and use `InsertedTextCorrectionScope` to admit only the exact inserted or replacement range. The only content read is the parameterized AX string for the validated replacement range; original text comes from EchoType’s own inserted transcript. Never read whole-field values, window titles, URLs, secure fields, or excluded apps. Missing or ambiguous AX data/notifications/target validation fails closed; apps whose notification ordering cannot safely establish a selection-before-change may not produce learning. Send only extractor-approved one-token pairs through the existing local-learning callback, preserving its three-repeat rule. |
-| Vocabulary | Apple contextual strings, Whisper prompt tokens, and Parakeet CTC rescoring only when its optional companion is installed. An explicit Parakeet download also downloads the CTC companion and shows the combined total before starting; if Parakeet is already installed, the companion is available through a separate explicit Settings button with its size shown. Adding or editing custom terms never starts a download. Missing or failed CTC installation skips rescoring but never blocks the base Parakeet transcript. Settings reports companion installation/download progress and errors. |
+| Vocabulary | Apple contextual strings, Whisper prompt tokens, and Parakeet CTC rescoring. Parakeet's CTC files are part of its one explicit model installation and are deleted with it. Existing verified files are reused and only missing files are downloaded. Adding or editing custom terms never starts a download. |
 | Recording options | Optional controls can pause Music/Spotify and lower writable system output volume, with saved volume restored at recording end. Browser media is not controlled. The instant-on microphone toggle remains visible but disabled and unavailable; no microphone is kept open between dictations. |
 | Comparison | Keep a recent clip in memory briefly for same-clip comparison; persist only if audio saving is enabled. Record local per-engine processing duration. |
-| Network | No telemetry, analytics, update checks, or background model downloads. Every third-party model download requires an explicit button press. A Parakeet install may include its CTC companion after displaying the combined size; if Parakeet is already installed, its companion has a separate explicit Settings button. No speech, transcripts, corrections, filenames, or usage data are uploaded. |
+| Network | No telemetry, analytics, update checks, or background model downloads. Every third-party model download requires an explicit button press. Parakeet's model and vocabulary files are one explicit install action, with the required total shown before download; verified existing files are reused. No speech, transcripts, corrections, filenames, or usage data are uploaded. |
 
 ## Delivery and verification plan
 

@@ -33,7 +33,7 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertEqual(catalog.download(forEngineID: "whisper-large-v3-turbo")?.id, "whisper-large-v3-turbo")
     }
 
-    func testParakeetLanguagesAndOptionalVocabularyAreExposedSeparately() throws {
+    func testParakeetLanguagesAndRequiredVocabularyDownloadAreExposed() throws {
         let catalog = try ModelCatalog(data: Data(contentsOf: manifestURL()))
         let parakeet = try XCTUnwrap(catalog.engine(id: "parakeet-v3"))
         let languages = Set(parakeet.supportedLanguages.map(\.code))
@@ -42,10 +42,19 @@ final class ModelCatalogTests: XCTestCase {
         XCTAssertTrue(languages.contains("en"))
         XCTAssertTrue(languages.contains("uk"))
         let vocabulary = try XCTUnwrap(catalog.download(id: "parakeet-ctc-0.6b-coreml"))
-        XCTAssertTrue(vocabulary.optional)
+        XCTAssertFalse(vocabulary.optional)
         XCTAssertTrue(vocabulary.files.contains { $0.destinationPath == "tokenizer.json" })
         XCTAssertEqual(vocabulary.bytes, 2_374_186_501)
         XCTAssertEqual(catalog.download(id: "whisper-large-v3-turbo")?.optional, false)
+    }
+
+    func testParakeetDownloadContainsTheInt8V2EncoderExpectedByFluidAudio() throws {
+        let catalog = try ModelCatalog(data: Data(contentsOf: manifestURL()))
+        let parakeet = try XCTUnwrap(catalog.download(id: "parakeet-v3"))
+        let destinations = Set(parakeet.files.map(\.destinationPath))
+
+        XCTAssertTrue(destinations.contains("Encoder_v2.mlmodelc/weights/weight.bin"))
+        XCTAssertFalse(destinations.contains { $0.hasPrefix("Encoder.mlmodelc/") })
     }
 
     func testCatalogRejectsDownloadByteTotalMismatch() throws {
