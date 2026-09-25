@@ -3,10 +3,11 @@ import WhisperKit
 import XCTest
 @testable import EchoTypeCore
 
-/// Opt-in REAL Core ML benchmark; intentionally never downloads, writes, or removes model assets.
-/// Run on the Mac with the installed large-v3-turbo folder and a short speech recording:
-/// ECHOTYPE_WHISPER_MODEL_DIRECTORY=/path/to/installed/whisper-large-v3-turbo \
-/// ECHOTYPE_WHISPER_BENCH_AUDIO=/path/to/recording.wav \
+/// Opt-in REAL Core ML benchmark; the test never downloads, writes, or removes model assets.
+/// CI provisions a pinned compiled tiny model and generated audio in RUNNER_TEMP.
+/// Locally, supply any compatible compiled WhisperKit model and a short speech file:
+/// ECHOTYPE_WHISPER_MODEL_DIRECTORY=/path/to/model-folder \
+/// ECHOTYPE_WHISPER_BENCH_AUDIO=/path/to/speech.wav \
 /// swift test --filter WhisperPerformanceTests
 final class WhisperPerformanceTests: XCTestCase {
     private final class Session: @unchecked Sendable {
@@ -77,11 +78,11 @@ final class WhisperPerformanceTests: XCTestCase {
         XCTAssertFalse(after1.isEmpty)
         XCTAssertFalse(before2.isEmpty)
         XCTAssertFalse(after2.isEmpty)
-        XCTAssertEqual(before1, after1, "Caching must preserve transcription")
-        XCTAssertEqual(before2, after2, "Caching must preserve transcription")
-        print("REAL Whisper large-v3-turbo baseline load+transcribe: \(elapsedBefore1)s, \(elapsedBefore2)s")
-        print("REAL Whisper large-v3-turbo cache miss then hit: \(elapsedAfter1)s, \(elapsedAfter2)s")
+        XCTAssertTrue(before1 == after1, "Caching must preserve transcription")
+        XCTAssertTrue(before2 == after2, "Caching must preserve transcription")
+        print("REAL Whisper baseline load+transcribe (uncached): \(elapsedBefore1)s, \(elapsedBefore2)s")
+        print("REAL Whisper cache miss then cache hit (including inference): \(elapsedAfter1)s, \(elapsedAfter2)s")
         print("Transcript equality by corresponding run: \(before1 == after1), \(before2 == after2)")
-        print("Core ML warmup, thermal state, and run order affect these numbers; no synthetic inference is measured.")
+        print("Core ML warmup, thermal state, and run order affect these numbers; audio may be generated, but inference is real.")
     }
 }
