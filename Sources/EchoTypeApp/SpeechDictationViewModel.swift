@@ -37,6 +37,10 @@ final class SpeechDictationViewModel {
     @ObservationIgnored private var speechAnalyzer: SpeechAnalyzer?
     @ObservationIgnored private var liveResultsTask: Task<Void, Never>?
     @ObservationIgnored private var liveTranscript = LiveTranscriptText()
+    @ObservationIgnored private var tentativeTranscript = ParakeetTentativeTranscript()
+    @ObservationIgnored private var previewToken: UUID?
+    @ObservationIgnored private var previewAudio: ParakeetPreviewAudioQueue?
+    @ObservationIgnored private var previewTask: Task<Void, Never>?
     @ObservationIgnored var onChange: ((SpeechDictationViewModel) -> Void)?
 
     static let preparedSpeechLocaleDefaultsKey = "EchoType.preparedSpeechLocale"
@@ -182,12 +186,16 @@ final class SpeechDictationViewModel {
                 errorMessage = "The selected model is not installed. Download it from Speech Models, then try again."
                 return
             }
-            await startAudioOnlyRecording()
+            await startAudioOnlyRecording(previewEnabled: backend == .parakeetV3)
             if isRecording {
                 recordingBackend = backend
                 recordingModelDirectory = modelDirectory
                 recordingCtcVocabularyDirectory = ctcVocabularyDirectory
                 recordingLanguageIdentifier = languageIdentifier
+                if backend == .parakeetV3, let previewAudio {
+                    startParakeetPreview(audio: previewAudio, modelDirectory: modelDirectory,
+                                         languageIdentifier: languageIdentifier)
+                }
             }
         case .unavailable(let engineID):
             errorMessage = "The selected transcription engine is unavailable: \(engineID)."
@@ -309,7 +317,7 @@ final class SpeechDictationViewModel {
         }
     }
 
-    private func startAudioOnlyRecording() async {
+    private func startAudioOnlyRecording(previewEnabled: Bool) async {
         guard !isPreparingAssets, !isRecording, !isTranscribing else { return }
         errorMessage = nil
 
@@ -337,8 +345,11 @@ final class SpeechDictationViewModel {
         var tapInstalled = false
         do {
             let writer = try AudioFileWriter(url: url, settings: inputFormat.settings)
+            let preview = previewEnabled
+                ? ParakeetPreviewAudioQueue(sampleRate: inputFormat.sampleRate) : nil
             let tapHandler = AudioTapHandlerFactory.make { buffer in
                 writer.write(buffer)
+                preview?.append(buffer)
             }
             inputNode.installTap(
                 onBus: 0,
@@ -352,6 +363,7 @@ final class SpeechDictationViewModel {
 
             audioEngine = engine
             audioWriter = writer
+            previewAudio = preview
             recordingURL = url
             microphoneName = selectedMicrophoneName
             transcript = ""
@@ -368,8 +380,41 @@ final class SpeechDictationViewModel {
         }
     }
 
+    private func startParakeetPreview(
+        audio: ParakeetPreviewAudioQueue, modelDirectory: URL, languageIdentifier: String
+    ) {
+        let token = tentativeTranscript.begin()
+        previewToken = token
+        let onUpdate: @Sendable (String) -> Void = { [weak self] text in
+            Task { @MainActor [weak self] in
+                guard let self, self.isRecording, self.recordingBackend == .parakeetV3,
+                      self.tentativeTranscript.accept(text, for: token) else { return }
+                self.transcript = self.tentativeTranscript.text
+                self.onChange?(self)
+            }
+        }
+        previewTask = Task.detached(priority: .utility) {
+            await ParakeetLivePreview.run(
+                audio: audio, modelDirectory: modelDirectory,
+                languageIdentifier: languageIdentifier, onUpdate: onUpdate
+            )
+        }
+    }
+
+    private func stopParakeetPreview() {
+        if let previewToken { tentativeTranscript.stop(previewToken) }
+        previewToken = nil
+        previewTask?.cancel()
+        previewTask = nil
+        previewAudio?.finish()
+        previewAudio = nil
+        // Tentative words may never become a final transcript, even when batch fails.
+        if recordingBackend == .parakeetV3 { transcript = "" }
+    }
+
     func stopAndTranscribe(saveAudio: Bool = false) async {
         guard isRecording, let engine = audioEngine, let recordingURL else { return }
+        if recordingBackend == .parakeetV3 { stopParakeetPreview() }
         isRecording = false
         isTranscribing = true
         onChange?(self)
@@ -415,7 +460,7 @@ final class SpeechDictationViewModel {
 
         let liveText = liveTranscript.visibleText
         if let writeError {
-            transcript = liveText
+            transcript = recordingBackend == .parakeetV3 ? "" : liveText
             errorMessage = "Could not finish the temporary recording: \(writeError)"
             return
         }
@@ -454,7 +499,7 @@ final class SpeechDictationViewModel {
                 throw LocalModelTranscriber.TranscriptionError.unavailableBackend("no selected engine")
             }
         } catch {
-            transcript = liveText
+            transcript = recordingBackend == .parakeetV3 ? "" : liveText
             errorMessage = error.localizedDescription
         }
     }
@@ -466,6 +511,7 @@ final class SpeechDictationViewModel {
 
     func cancelAndDiscardRecording() async {
         guard isRecording, let recordingURL else { return }
+        if recordingBackend == .parakeetV3 { stopParakeetPreview() }
         isRecording = false
         isTranscribing = false
         audioEngine?.inputNode.removeTap(onBus: 0)

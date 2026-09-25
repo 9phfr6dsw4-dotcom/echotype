@@ -3,7 +3,19 @@ import FluidAudio
 import Foundation
 import WhisperKit
 
+// WhisperKit owns mutable decoding state. Its only consumer is the serialized cache operation.
+private final class CachedWhisperSession: @unchecked Sendable {
+    let whisper: WhisperKit
+    let tokenizer: TokenizerWrapper
+
+    init(whisper: WhisperKit, tokenizer: TokenizerWrapper) {
+        self.whisper = whisper
+        self.tokenizer = tokenizer
+    }
+}
+
 struct LocalModelTranscriber {
+    private static let whisperCache = SerializedModelCache<CachedWhisperSession>()
     enum TranscriptionError: LocalizedError {
         case unavailableBackend(String)
         case missingLocalAsset(String)
@@ -125,42 +137,48 @@ struct LocalModelTranscriber {
         languageIdentifier: String?,
         vocabularyTerms: [String]
     ) async throws -> String {
-        let tokenizerURL = modelDirectory.appendingPathComponent("tokenizer.json")
-        guard FileManager.default.fileExists(atPath: tokenizerURL.path) else {
-            throw TranscriptionError.missingLocalAsset(tokenizerURL.lastPathComponent)
-        }
-        let offlineHub = HubApiWrapper(
-            downloadBase: modelDirectory,
-            endpoint: "file:///EchoType-offline-hub"
-        )
-        let localTokenizer = try await AutoTokenizerWrapper.from(
-            modelFolder: modelDirectory,
-            hubApi: offlineHub
-        )
-        guard localTokenizer.convertTokenToId("<|endoftext|>") != nil else {
-            throw TranscriptionError.missingLocalAsset("tokenizer.json (Whisper special tokens)")
-        }
-
-        let config = WhisperKitConfig(
-            modelFolder: modelDirectory.path,
-            tokenizerFolder: modelDirectory,
-            verbose: false,
-            prewarm: true,
-            load: true,
-            download: false,
-            useBackgroundDownloadSession: false
-        )
-        let whisper = try await WhisperKit(config)
-        let promptText = TranscriptionVocabulary.whisperPromptText(from: vocabularyTerms)
-        let promptTokens = promptText.isEmpty ? nil : localTokenizer.encode(text: promptText)
-        let options = DecodingOptions(
-            language: normalizedLanguageCode(languageIdentifier),
-            skipSpecialTokens: true,
-            withoutTimestamps: true,
-            promptTokens: promptTokens
-        )
-        let results = try await whisper.transcribe(audioPath: audioURL.path, decodeOptions: options)
-        return try nonempty(results.map(\.text).joined(separator: " "))
+        try await whisperCache.withModel(at: modelDirectory, load: { directory in
+            let tokenizerURL = directory.appendingPathComponent("tokenizer.json")
+            guard FileManager.default.fileExists(atPath: tokenizerURL.path) else {
+                throw TranscriptionError.missingLocalAsset(tokenizerURL.lastPathComponent)
+            }
+            let offlineHub = HubApiWrapper(
+                downloadBase: directory,
+                endpoint: "file:///EchoType-offline-hub"
+            )
+            let tokenizer = try await AutoTokenizerWrapper.from(
+                modelFolder: directory,
+                hubApi: offlineHub
+            )
+            guard tokenizer.convertTokenToId("<|endoftext|>") != nil else {
+                throw TranscriptionError.missingLocalAsset("tokenizer.json (Whisper special tokens)")
+            }
+            let config = WhisperKitConfig(
+                modelFolder: directory.path,
+                tokenizerFolder: directory,
+                verbose: false,
+                prewarm: true,
+                load: true,
+                download: false,
+                useBackgroundDownloadSession: false
+            )
+            return try await CachedWhisperSession(
+                whisper: WhisperKit(config), tokenizer: tokenizer
+            )
+        }, operation: { session in
+            let promptText = TranscriptionVocabulary.whisperPromptText(from: vocabularyTerms)
+            let promptTokens = promptText.isEmpty ? nil : session.tokenizer.encode(text: promptText)
+            let options = DecodingOptions(
+                language: normalizedLanguageCode(languageIdentifier),
+                skipSpecialTokens: true,
+                withoutTimestamps: true,
+                promptTokens: promptTokens
+            )
+            let results = try await session.whisper.transcribe(
+                audioPath: audioURL.path, decodeOptions: options
+            )
+            return try nonempty(results.map(\.text).joined(separator: " "))
+        })
     }
 
     private static func normalizedLanguageCode(_ identifier: String?) -> String? {

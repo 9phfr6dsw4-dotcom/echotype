@@ -22,6 +22,9 @@ let package = Package(
                 .product(name: "WhisperKit", package: "argmax-oss-swift")
             ]
         ),
-        .testTarget(name: "EchoTypeTests", dependencies: ["EchoTypeCore"])
+        .testTarget(
+            name: "EchoTypeTests",
+            dependencies: ["EchoTypeCore", .product(name: "WhisperKit", package: "argmax-oss-swift")]
+        )
     ]
 )
