@@ -54,9 +54,9 @@ struct LocalModelTranscriber {
         languageIdentifier: String?
     ) async throws -> String {
         let code = normalizedLanguageCode(languageIdentifier)
-        let language: FluidAudio.Language?
+        let language: Language?
         if let code {
-            guard let supported = FluidAudio.Language(rawValue: code) else {
+            guard let supported = Language(rawValue: code) else {
                 throw TranscriptionError.unsupportedParakeetLanguage(languageIdentifier ?? code)
             }
             language = supported
