@@ -24,6 +24,7 @@ final class SpeechDictationViewModel {
     @ObservationIgnored private var speechAnalyzer: SpeechAnalyzer?
     @ObservationIgnored private var liveResultsTask: Task<Void, Never>?
     @ObservationIgnored private var liveTranscript = LiveTranscriptText()
+    @ObservationIgnored var onChange: ((SpeechDictationViewModel) -> Void)?
 
     init() {
         Self.removeInterruptedRecordings()
@@ -95,6 +96,7 @@ final class SpeechDictationViewModel {
                         isFinal: result.isFinal
                     )
                     self.transcript = self.liveTranscript.visibleText
+                    self.onChange?(self)
                 }
             } catch {
                 guard let self, !Task.isCancelled else { return }
@@ -127,6 +129,7 @@ final class SpeechDictationViewModel {
             transcript = ""
             liveTranscript.reset()
             isRecording = true
+            onChange?(self)
         } catch {
             if tapInstalled {
                 inputNode.removeTap(onBus: 0)
@@ -144,10 +147,12 @@ final class SpeechDictationViewModel {
         guard isRecording, let engine = audioEngine, let recordingURL else { return }
         isRecording = false
         isTranscribing = true
+        onChange?(self)
         defer {
             try? FileManager.default.removeItem(at: recordingURL)
             self.recordingURL = nil
             self.isTranscribing = false
+            self.onChange?(self)
         }
 
         engine.inputNode.removeTap(onBus: 0)

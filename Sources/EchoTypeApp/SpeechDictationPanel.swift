@@ -2,7 +2,11 @@ import AppKit
 import SwiftUI
 
 struct SpeechDictationPanel: View {
-    @State private var dictation = SpeechDictationViewModel()
+    @Environment(EchoTypeRuntime.self) private var runtime
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("EchoType.showLiveWords") private var showLiveWords = true
+
+    private var dictation: SpeechDictationViewModel { runtime.dictation }
 
     var body: some View {
         GroupBox {
@@ -19,7 +23,6 @@ struct SpeechDictationPanel: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-
                     actionButton
                 }
 
@@ -27,6 +30,8 @@ struct SpeechDictationPanel: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                hotkeySettings
 
                 if dictation.isPreparingAssets || dictation.isTranscribing {
                     ProgressView(dictation.isPreparingAssets ? "Preparing Apple Speech…" : "Transcribing locally…")
@@ -61,13 +66,68 @@ struct SpeechDictationPanel: View {
         } label: {
             Label("Dictation", systemImage: "mic")
         }
+        .onAppear {
+            runtime.overlayModel.showLiveWords = showLiveWords
+            runtime.hotkey.refreshPermission()
+        }
+        .onChange(of: showLiveWords) { _, isVisible in
+            runtime.overlayModel.showLiveWords = isVisible
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                runtime.hotkey.refreshPermission()
+            }
+        }
+    }
+
+    private var hotkeySettings: some View {
+        GroupBox("Global hotkey") {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 12) {
+                    Picker("Tap to toggle", selection: Binding(
+                        get: { runtime.hotkey.selectedKeyCode },
+                        set: { runtime.hotkey.chooseKey(keyCode: $0) }
+                    )) {
+                        Text("Left Control").tag(UInt16(59))
+                        Text("Right Option").tag(UInt16(61))
+                    }
+                    .frame(width: 245)
+
+                    if runtime.hotkey.hasAccessibilityPermission {
+                        Button(runtime.hotkey.isEnabled ? "Disable Hotkey" : "Enable Hotkey") {
+                            if runtime.hotkey.isEnabled {
+                                runtime.hotkey.disable()
+                            } else {
+                                runtime.hotkey.enable()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    } else {
+                        Button("Open Accessibility Settings") {
+                            runtime.hotkey.openAccessibilitySettings()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+
+                Text(runtime.hotkey.statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle("Show live words in the recording overlay", isOn: $showLiveWords)
+                    .font(.caption)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
     }
 
     private var actionButton: some View {
         Group {
             if dictation.isRecording {
                 Button(role: .destructive) {
-                    Task { await dictation.stopAndTranscribe() }
+                    Task { await runtime.toggleRecording() }
                 } label: {
                     Label("Stop and Transcribe", systemImage: "stop.fill")
                 }

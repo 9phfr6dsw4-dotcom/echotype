@@ -5,10 +5,12 @@ import SwiftUI
 @MainActor
 struct EchoTypeApp: App {
     @NSApplicationDelegateAdaptor(EchoTypeApplicationDelegate.self) private var applicationDelegate
+    @State private var runtime = EchoTypeRuntime()
 
     var body: some Scene {
         WindowGroup("EchoType") {
             ModelLibraryView()
+                .environment(runtime)
                 .navigationTitle("EchoType")
         }
         .defaultSize(width: 920, height: 760)

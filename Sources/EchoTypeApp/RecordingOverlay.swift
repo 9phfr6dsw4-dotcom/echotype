@@ -1,0 +1,152 @@
+import AppKit
+import Observation
+import SwiftUI
+
+@MainActor
+@Observable
+final class RecordingOverlayModel {
+    enum Phase: Equatable {
+        case idle
+        case recording
+        case finishing
+        case done
+    }
+
+    var phase: Phase = .idle
+    var transcript = ""
+    var showLiveWords = true
+}
+
+@MainActor
+final class RecordingOverlayWindowController {
+    private let model: RecordingOverlayModel
+    private let panel: NSPanel
+    private var hideTask: Task<Void, Never>?
+
+    init(model: RecordingOverlayModel) {
+        self.model = model
+        panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 112),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        panel.hidesOnDeactivate = false
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = true
+        panel.contentView = NSHostingView(rootView: RecordingOverlayView(model: model))
+        panel.orderOut(nil)
+    }
+
+    func show() {
+        hideTask?.cancel()
+        positionPanel()
+        guard !panel.isVisible else { return }
+        panel.alphaValue = 0
+        panel.orderFrontRegardless()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            panel.animator().alphaValue = 1
+        }
+    }
+
+    func hide() {
+        guard panel.isVisible else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            panel.animator().alphaValue = 0
+        }
+        hideTask?.cancel()
+        hideTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(240))
+            guard !Task.isCancelled, let self else { return }
+            self.panel.orderOut(nil)
+            self.panel.alphaValue = 1
+        }
+    }
+
+    private func positionPanel() {
+        let screen = NSScreen.main ?? NSScreen.screens.first
+        guard let screen else { return }
+
+        var centerX = screen.frame.midX
+        if let leftArea = screen.auxiliaryTopLeftArea,
+           let rightArea = screen.auxiliaryTopRightArea,
+           leftArea.maxX <= rightArea.minX {
+            centerX = (leftArea.maxX + rightArea.minX) / 2
+        }
+
+        let size = panel.frame.size
+        let origin = NSPoint(x: centerX - size.width / 2, y: screen.frame.maxY - size.height)
+        panel.setFrameOrigin(origin)
+    }
+}
+
+private struct RecordingOverlayView: View {
+    let model: RecordingOverlayModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(model.phase == .recording ? Color.red : Color.green)
+                    .frame(width: 8, height: 8)
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                Spacer()
+                if model.phase == .recording {
+                    Image(systemName: "waveform")
+                        .foregroundStyle(.red)
+                        .symbolEffect(.variableColor.iterative, isActive: true)
+                } else if model.phase == .finishing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+            }
+
+            if model.showLiveWords && !model.transcript.isEmpty {
+                Text(model.transcript)
+                    .font(.system(size: 14, weight: .medium))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if model.phase == .recording {
+                Text(model.showLiveWords ? "Listening…" : "Live words hidden")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white.opacity(0.68))
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 15)
+        .frame(width: 520, height: 112, alignment: .center)
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color.black)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.24), radius: 18, y: 6)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("EchoType \(title). \(model.showLiveWords ? model.transcript : "")")
+    }
+
+    private var title: String {
+        switch model.phase {
+        case .idle: "EchoType"
+        case .recording: "Listening"
+        case .finishing: "Finishing transcription"
+        case .done: "Dictation complete"
+        }
+    }
+}

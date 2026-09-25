@@ -14,7 +14,7 @@ Separate MacWhisper user posts request additional shortcuts and glossary/context
 
 These are reports and feature requests, not measured failure rates.[2][3][28]
 
-Secure keyboard input can block global shortcuts.[5] Listening for keyboard events requires macOS Input Monitoring.[10] EchoType will explain that permission separately from microphone access and Accessibility-based paste, use a listen-only event tap, and refuse to paste into a secure field or a target that changed after recording.
+Secure keyboard input can block global shortcuts.[5] EchoType uses AppKit global and local event monitors: the global monitor observes other apps, while the local monitor covers EchoType itself; these monitors do not consume keystrokes.[60] The hotkey is gated by Accessibility permission, so the app opens that specific System Settings pane. A bare modifier tap is recognized only on release and is cancelled if another key is pressed, preventing ordinary combinations such as Control-C from toggling dictation. Secure-input detection and protected text insertion remain follow-up work.
 
 No controlled same-audio comparison among Apple Speech, Parakeet v3, and Whisper large-v3-turbo on an M5 MacBook Air was found in the sources reviewed.[13][22][23] EchoType will avoid promising a universal winner and record local processing times so the user can compare the same clip.
 
@@ -93,7 +93,7 @@ The UI will distinguish these mechanisms from post-transcription spelling correc
 |---|---|
 | Engine selection | Exactly three choices. Apple is the working first-run fallback; after Parakeet has downloaded and loaded successfully, make it the default. Switching happens between recordings. |
 | Live preview | Use the selected engine for partial and final text. Never label Apple preview as Parakeet or Whisper. Allow hiding live words while keeping a recording indicator. |
-| Hotkeys | Left Control hold-to-talk and Right Option tap-to-toggle by default, with backup shortcut and configurable hold/tap behavior. Never consume shortcut events. |
+| Hotkeys | Left Control bare tap-to-toggle by default, with Right Option as a selectable alternative. Ignore modifier chords, never consume keystrokes, and keep the monitor in app-level runtime so closing the window does not stop it. Hold-to-talk, backup, and custom key capture remain unimplemented. |
 | Overlay and focus | Non-activating overlay placed from the active display’s notch geometry (top-center fallback). Check foreground app and focused role before paste; respect secure fields/exclusions. On focus change, offer Copy instead. Save and restore clipboard around paste. |
 | App presence | Keep a normal Dock icon and a reopenable settings/history window. |
 | Storage | Audio stays in memory by default; optional audio saving is off initially. Local transcript history defaults to 30 days, with 7 days, 90 days, and forever choices. Retention never deletes learned terms. |
@@ -175,3 +175,6 @@ Run `swift test`, build and ad-hoc sign the app bundle, verify the extracted ZIP
 [57] https://github.com/argmaxinc/argmax-oss-swift/blob/v1.1.0/Sources/WhisperKit/Core/Audio/AudioStreamTranscriber.swift — WhisperKit v1.1.0 real-time streaming and input device
 [58] https://github.com/argmaxinc/argmax-oss-swift/blob/v1.1.0/Sources/WhisperKit/Core/Configurations.swift — WhisperKit v1.1.0 prompt token configuration
 [59] https://github.com/actions/runner-images/issues/14112 — macOS 26 runner architecture mismatch report
+[60] https://developer.apple.com/documentation/appkit/nsevent/addglobalmonitorforevents%28matching%3Ahandler%3A%29?language=objc — AppKit global event monitoring
+[61] https://developer.apple.com/documentation/appkit/nsscreen/auxiliarytopleftarea-uglc?language=_1 — Display area adjacent to the camera housing
+[62] https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/fullscreenauxiliary — Windows displayed alongside full-screen apps
