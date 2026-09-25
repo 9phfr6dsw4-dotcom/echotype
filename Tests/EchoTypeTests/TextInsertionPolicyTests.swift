@@ -83,4 +83,18 @@ final class TextInsertionPolicyTests: XCTestCase {
             .copyOnly(.targetUnavailable)
         )
     }
+
+    func testSecureFieldSubroleIsNeverEligible() {
+        let target = TextInsertionSnapshot(
+            processIdentifier: 42,
+            bundleIdentifier: "com.example.editor",
+            focusedRole: "AXTextField",
+            focusedSubrole: "AXSecureTextField"
+        )
+
+        XCTAssertEqual(
+            policy.decision(captured: target, current: target, sameFocusedElement: true),
+            .copyOnly(.secureField)
+        )
+    }
 }

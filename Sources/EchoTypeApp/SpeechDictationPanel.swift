@@ -5,6 +5,8 @@ struct SpeechDictationPanel: View {
     @Environment(EchoTypeRuntime.self) private var runtime
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("EchoType.showLiveWords") private var showLiveWords = true
+    @AppStorage("EchoType.copyToClipboard") private var copyToClipboard = false
+    @AppStorage("EchoType.autoSend") private var autoSend = false
 
     private var dictation: SpeechDictationViewModel { runtime.dictation }
 
@@ -52,6 +54,13 @@ struct SpeechDictationPanel: View {
                     Text(dictation.transcript)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if let deliveryMessage = runtime.deliveryMessage {
+                    Label(deliveryMessage, systemImage: "text.bubble")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if let errorMessage = dictation.errorMessage {
@@ -117,6 +126,15 @@ struct SpeechDictationPanel: View {
 
                 Toggle("Show live words in the recording overlay", isOn: $showLiveWords)
                     .font(.caption)
+                Toggle("Copy final text to clipboard and keep it there", isOn: $copyToClipboard)
+                    .font(.caption)
+                Toggle("Press Return after inserting text", isOn: $autoSend)
+                    .font(.caption)
+                if autoSend {
+                    Text("Auto-send can submit a message or form in the target app.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
@@ -134,7 +152,7 @@ struct SpeechDictationPanel: View {
                 .buttonStyle(.borderedProminent)
             } else if dictation.assetsPrepared {
                 Button {
-                    Task { await dictation.startRecording() }
+                    Task { await runtime.startRecording() }
                 } label: {
                     Label("Start Dictation", systemImage: "mic.fill")
                 }

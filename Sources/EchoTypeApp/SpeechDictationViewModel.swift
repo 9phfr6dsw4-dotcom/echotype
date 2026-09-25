@@ -204,6 +204,29 @@ final class SpeechDictationViewModel {
         }
     }
 
+    func cancelAndDiscardRecording() async {
+        guard isRecording, let recordingURL else { return }
+        isRecording = false
+        isTranscribing = false
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine = nil
+        audioWriter = nil
+        inputBridge?.finish()
+        inputBridge = nil
+        if let speechAnalyzer {
+            await speechAnalyzer.cancelAndFinishNow()
+        }
+        speechAnalyzer = nil
+        liveResultsTask?.cancel()
+        liveResultsTask = nil
+        try? FileManager.default.removeItem(at: recordingURL)
+        self.recordingURL = nil
+        liveTranscript.reset()
+        transcript = ""
+        onChange?(self)
+    }
+
     private func microphoneAccessGranted() async -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
