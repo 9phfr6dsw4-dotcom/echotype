@@ -99,35 +99,7 @@ private struct RecordingOverlayView: View {
     var body: some View {
         ZStack(alignment: .top) {
             if model.phase != .idle {
-                Group {
-                    if isExpanded {
-                        expandedContent
-                            .transition(.opacity)
-                    } else {
-                        Circle()
-                            .fill(model.phase == .done ? Color.green : Color.red)
-                            .frame(width: 8, height: 8)
-                            .transition(.opacity)
-                    }
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, isExpanded ? 22 : 0)
-                .padding(.vertical, isExpanded ? 15 : 12)
-                .frame(
-                    width: isExpanded ? 520 : 180,
-                    height: isExpanded ? (model.deliveryMessage == nil ? 112 : 205) : 32
-                )
-                .background {
-                    RoundedRectangle(cornerRadius: isExpanded ? 28 : 16, style: .continuous)
-                        .fill(Color.black)
-                        .overlay {
-                            if isExpanded {
-                                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
-                            }
-                        }
-                        .shadow(color: .black.opacity(isExpanded ? 0.24 : 0), radius: 18, y: 6)
-                }
+                overlayPanel
             }
         }
         .frame(width: 520, height: 205, alignment: .top)
@@ -145,6 +117,41 @@ private struct RecordingOverlayView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var overlayPanel: some View {
+        Group {
+            if isExpanded {
+                expandedContent.transition(.opacity)
+            } else {
+                Circle()
+                    .fill(model.phase == .done ? Color.green : Color.red)
+                    .frame(width: 8, height: 8)
+                    .transition(.opacity)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, isExpanded ? 22 : 0)
+        .padding(.vertical, isExpanded ? 15 : 12)
+        .frame(width: isExpanded ? 520 : 180, height: panelHeight)
+        .background { panelBackground }
+    }
+
+    private var panelHeight: CGFloat {
+        guard isExpanded else { return 32 }
+        return model.deliveryMessage == nil ? 112 : 205
+    }
+
+    private var panelBackground: some View {
+        RoundedRectangle(cornerRadius: isExpanded ? 28 : 16, style: .continuous)
+            .fill(Color.black)
+            .overlay {
+                if isExpanded {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                }
+            }
+            .shadow(color: .black.opacity(isExpanded ? 0.24 : 0), radius: 18, y: 6)
     }
 
     private var accessibilityLabel: String {

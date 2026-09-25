@@ -304,8 +304,8 @@ final class EchoTypeRuntime {
             overlayModel.phase = .done
             overlayWindow.show()
             dismissOverlayTask?.cancel()
+            let hideDelay: Duration = overlayModel.deliveryMessage == nil ? .milliseconds(1200) : .seconds(5)
             dismissOverlayTask = Task { @MainActor [weak self] in
-                let hideDelay: Duration = overlayModel.deliveryMessage == nil ? .milliseconds(1200) : .seconds(5)
                 try? await Task.sleep(for: hideDelay)
                 guard !Task.isCancelled else { return }
                 self?.overlayWindow.hide()
