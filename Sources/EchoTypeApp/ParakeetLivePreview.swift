@@ -54,8 +54,9 @@ enum ParakeetLivePreview {
             }
             do {
                 var converter: SpeechAudioBufferConverter?
-                for await buffer in audio.buffers {
+                for await captured in audio.buffers {
                     try Task.checkCancellation()
+                    let buffer = captured.buffer
                     // The tap only copies. Conversion and actor hops run on this worker.
                     let activeConverter: SpeechAudioBufferConverter
                     if let converter {

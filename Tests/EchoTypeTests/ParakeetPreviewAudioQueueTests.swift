@@ -21,7 +21,7 @@ final class ParakeetPreviewAudioQueueTests: XCTestCase {
         queue.finish()
         var iterator = queue.buffers.makeAsyncIterator()
         let nextBuffer = await iterator.next()
-        let captured = try XCTUnwrap(nextBuffer)
+        let captured = try XCTUnwrap(nextBuffer).buffer
         XCTAssertEqual(captured.floatChannelData![0][0], 0.25)
         let converter = try SpeechAudioBufferConverter(inputFormat: inputFormat, outputFormat: outputFormat)
         let converted = try converter.convert(captured)

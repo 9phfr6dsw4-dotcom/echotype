@@ -1,12 +1,20 @@
 import AVFoundation
 import Foundation
 
+/// An independently allocated audio buffer, written once before being sent to the stream.
+/// The source tap never sees this instance; the consumer is its sole reader and never mutates it.
+public struct ParakeetCapturedAudioBuffer: @unchecked Sendable {
+    public let buffer: AVAudioPCMBuffer
+
+    fileprivate init(_ buffer: AVAudioPCMBuffer) { self.buffer = buffer }
+}
+
 /// Copies tap-owned PCM into a bounded, single-consumer stream. No transcription,
 /// format conversion, main-actor work, or UI callbacks occur on the audio thread.
 public final class ParakeetPreviewAudioQueue: @unchecked Sendable {
     private let lock = NSLock()
-    private let continuation: AsyncStream<AVAudioPCMBuffer>.Continuation
-    public let buffers: AsyncStream<AVAudioPCMBuffer>
+    private let continuation: AsyncStream<ParakeetCapturedAudioBuffer>.Continuation
+    public let buffers: AsyncStream<ParakeetCapturedAudioBuffer>
     private let maximumFrames: Double
     private var receivedFrames: Double = 0
     private var active = true
@@ -21,7 +29,7 @@ public final class ParakeetPreviewAudioQueue: @unchecked Sendable {
     /// A full recording always continues to the CAF/batch path after preview expires.
     public init(sampleRate: Double, maximumSeconds: Double = 45) {
         maximumFrames = sampleRate * maximumSeconds
-        let (stream, builder) = AsyncStream<AVAudioPCMBuffer>.makeStream(
+        let (stream, builder) = AsyncStream<ParakeetCapturedAudioBuffer>.makeStream(
             bufferingPolicy: .bufferingOldest(512)
         )
         buffers = stream
@@ -39,7 +47,7 @@ public final class ParakeetPreviewAudioQueue: @unchecked Sendable {
             return
         }
         receivedFrames += frames
-        switch continuation.yield(copy) {
+        switch continuation.yield(ParakeetCapturedAudioBuffer(copy)) {
         case .enqueued: break
         case .dropped, .terminated: stopLocked() // Never transcribe audio with a gap.
         @unknown default: stopLocked()
