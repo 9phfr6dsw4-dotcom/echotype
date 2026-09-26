@@ -44,7 +44,7 @@ public struct TextInsertionDiagnostic: Equatable, Sendable {
     }
 
     public var description: String {
-        var lines = [
+        let lines = [
             "App at dictation stop: \(appAtDictationStop)",
             "App when text was ready: \(appWhenTextWasReady)",
             "Focused element at stop: \(focusedElementAtStop)",

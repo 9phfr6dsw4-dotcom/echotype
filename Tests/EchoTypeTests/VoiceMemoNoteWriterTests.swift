@@ -87,6 +87,30 @@ final class VoiceMemoNoteWriterTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path), [])
     }
 
+    func testEveryErrorHasAUserFacingDescription() throws {
+        let folder = URL(fileURLWithPath: "/tmp/Voice Memos", isDirectory: true)
+        let cases: [(VoiceMemoNoteWriterError, String)] = [
+            (.emptyTranscript, "No speech was recognized, so no voice memo was saved."),
+            (
+                .destinationIsNotDirectory(folder),
+                "The selected voice memo destination is not an existing folder: /tmp/Voice Memos"
+            ),
+            (
+                .atomicPublishUnavailable(folder),
+                "This folder's storage does not support safely publishing a complete memo without replacing an existing file: /tmp/Voice Memos. Choose another folder."
+            ),
+            (
+                .fileWriteFailed("/tmp/Voice Memos/memo.md", EACCES),
+                "Could not save the voice memo at /tmp/Voice Memos/memo.md: \(POSIXError(.EACCES).localizedDescription)"
+            )
+        ]
+
+        for (error, expected) in cases {
+            XCTAssertEqual(error.errorDescription, expected)
+            XCTAssertEqual((error as Error).localizedDescription, expected)
+        }
+    }
+
     func testBookmarkStorePersistsAndResolvesTheChosenExistingFolder() throws {
         let folder = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }

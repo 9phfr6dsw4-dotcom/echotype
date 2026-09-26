@@ -10,11 +10,11 @@ public enum VoiceMemoNoteWriterError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .emptyTranscript:
-            "No speech was recognized, so no voice memo was saved."
+            return "No speech was recognized, so no voice memo was saved."
         case .destinationIsNotDirectory(let url):
-            "The selected voice memo destination is not an existing folder: \(url.path)"
+            return "The selected voice memo destination is not an existing folder: \(url.path)"
         case .atomicPublishUnavailable(let url):
-            "This folder's storage does not support safely publishing a complete memo without replacing an existing file: \(url.path). Choose another folder."
+            return "This folder's storage does not support safely publishing a complete memo without replacing an existing file: \(url.path). Choose another folder."
         case .fileWriteFailed(let path, let code):
             let detail = POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO).localizedDescription
             return "Could not save the voice memo at \(path): \(detail)"
@@ -75,9 +75,7 @@ public struct VoiceMemoNoteWriter {
                 if errorCode == EEXIST { continue }
                 throw VoiceMemoNoteWriterError.fileWriteFailed(temporaryURL.path, errorCode)
             }
-            let aclResult = Darwin.acl_delete_fd_np(descriptor, ACL_TYPE_EXTENDED)
-            let aclError = errno
-            if aclResult != 0 && aclError != ENOENT {
+            if let aclError = Self.removeExtendedACL(from: descriptor) {
                 _ = Darwin.close(descriptor)
                 _ = Darwin.unlink(temporaryURL.path)
                 throw VoiceMemoNoteWriterError.fileWriteFailed(temporaryURL.path, aclError)
@@ -117,6 +115,33 @@ public struct VoiceMemoNoteWriter {
             }
             throw VoiceMemoNoteWriterError.fileWriteFailed(fileURL.path, errorCode)
         }
+    }
+
+    /// Replaces any extended ACL (including entries inherited from the destination folder)
+    /// with an empty one, then verifies that no ACL entries remain. Returns an errno value
+    /// when the file cannot be proven free of ACL grants, so callers fail closed.
+    private static func removeExtendedACL(from descriptor: Int32) -> Int32? {
+        guard let emptyACL = Darwin.acl_init(0) else {
+            return errno == 0 ? ENOMEM : errno
+        }
+        let setResult = Darwin.acl_set_fd_np(descriptor, emptyACL, ACL_TYPE_EXTENDED)
+        let setError = errno
+        _ = Darwin.acl_free(UnsafeMutableRawPointer(emptyACL))
+
+        errno = 0
+        guard let remainingACL = Darwin.acl_get_fd_np(descriptor, ACL_TYPE_EXTENDED) else {
+            let getError = errno
+            // ENOENT means the file has no extended ACL at all.
+            if getError == ENOENT { return nil }
+            if setResult != 0 { return setError == 0 ? EPERM : setError }
+            return getError == 0 ? EPERM : getError
+        }
+        defer { _ = Darwin.acl_free(UnsafeMutableRawPointer(remainingACL)) }
+        var entry: acl_entry_t?
+        if Darwin.acl_get_entry(remainingACL, Int32(ACL_FIRST_ENTRY.rawValue), &entry) == 0 {
+            return setResult != 0 && setError != 0 ? setError : EPERM
+        }
+        return nil
     }
 
     private static func write(_ data: Data, to descriptor: Int32, path: String) throws {
