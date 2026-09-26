@@ -67,7 +67,7 @@ final class GlobalHotkeyController {
 
     private var selectedModifierFlags: KeyboardShortcutModifierFlags {
         guard case let .modifierKey(keyCode) = selectedHotkey else { return [] }
-        switch keyCode {
+        return switch keyCode {
         case Self.controlKeyCode: .control
         case Self.rightOptionKeyCode: .option
         case Self.functionKeyCode: .function
