@@ -1,0 +1,105 @@
+name: Publish EchoType release
+
+# Publishes the exact EchoType.zip that EchoType CI built, tested, packaged,
+# and smoke-tested for the tagged commit. Nothing is rebuilt here.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish CI-built app for ${{ github.ref_name }}
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+      TAG_SHA: ${{ github.sha }}
+    steps:
+      - name: Find the successful CI run for the tagged commit
+        id: ci
+        run: |
+          set -euo pipefail
+          runs="$(gh run list --workflow macos-ci.yml --commit "$TAG_SHA" --status success \
+            --limit 1 --json databaseId,number,headSha,url)"
+          run_id="$(jq -r '.[0].databaseId // empty' <<<"$runs")"
+          run_number="$(jq -r '.[0].number // empty' <<<"$runs")"
+          head_sha="$(jq -r '.[0].headSha // empty' <<<"$runs")"
+          if [[ -z "$run_id" || "$head_sha" != "$TAG_SHA" ]]; then
+            printf 'No successful EchoType CI run exists for %s (%s).\n' "$TAG" "$TAG_SHA" >&2
+            exit 1
+          fi
+          printf 'Using CI run %s\n' "$(jq -r '.[0].url' <<<"$runs")"
+          printf 'run_id=%s\nrun_number=%s\n' "$run_id" "$run_number" >> "$GITHUB_OUTPUT"
+
+      - name: Download the CI artifact
+        env:
+          RUN_ID: ${{ steps.ci.outputs.run_id }}
+          RUN_NUMBER: ${{ steps.ci.outputs.run_number }}
+        run: |
+          set -euo pipefail
+          gh run download "$RUN_ID" --name "EchoType-$RUN_NUMBER" --dir "$RUNNER_TEMP/release-assets"
+          ls -l "$RUNNER_TEMP/release-assets"
+
+      - name: Verify checksum, bundle identity, and signature
+        working-directory: ${{ runner.temp }}/release-assets
+        run: |
+          set -euo pipefail
+          test -s EchoType.zip
+          test -s EchoType.zip.sha256
+          shasum -a 256 -c EchoType.zip.sha256
+          ditto -x -k EchoType.zip extracted
+          app="extracted/EchoType.app"
+          test -x "$app/Contents/MacOS/EchoType"
+          plutil -lint "$app/Contents/Info.plist"
+          short_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
+          build_number="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")"
+          printf 'Bundle version %s (build %s)\n' "$short_version" "$build_number"
+          if [[ "v$short_version" != "$TAG" ]]; then
+            printf 'Bundle version %s does not match tag %s.\n' "$short_version" "$TAG" >&2
+            exit 1
+          fi
+          codesign --verify --deep --strict --verbose=2 "$app"
+          rm -rf extracted
+
+      - name: Read release notes from the annotated tag
+        run: |
+          set -euo pipefail
+          tag_object="$(gh api "repos/$GH_REPO/git/ref/tags/$TAG")"
+          if [[ "$(jq -r '.object.type' <<<"$tag_object")" != "tag" ]]; then
+            printf '%s must be an annotated tag; its message is used as the release notes.\n' "$TAG" >&2
+            exit 1
+          fi
+          gh api "repos/$GH_REPO/git/tags/$(jq -r '.object.sha' <<<"$tag_object")" \
+            --jq '.message' > "$RUNNER_TEMP/release-notes.md"
+          test -s "$RUNNER_TEMP/release-notes.md"
+
+      - name: Publish release
+        working-directory: ${{ runner.temp }}/release-assets
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" EchoType.zip EchoType.zip.sha256 \
+            --verify-tag \
+            --title "EchoType $TAG" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
+
+      - name: Read back published assets
+        working-directory: ${{ runner.temp }}/release-assets
+        run: |
+          set -euo pipefail
+          published="$(gh api "repos/$GH_REPO/releases/tags/$TAG")"
+          for asset in EchoType.zip EchoType.zip.sha256; do
+            expected="sha256:$(shasum -a 256 "$asset" | awk '{print $1}')"
+            actual="$(jq -r --arg name "$asset" '.assets[] | select(.name == $name) | .digest' <<<"$published")"
+            printf '%s expected %s published %s\n' "$asset" "$expected" "$actual"
+            test "$expected" = "$actual"
+          done
