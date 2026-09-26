@@ -76,6 +76,23 @@ struct ModelLibraryView: View {
         }
     }
 
+    /// "Ready" only once every part of an engine is installed; Parakeet downloads its model and
+    /// vocabulary files in one click, and the card should not look finished halfway through.
+    private func installStatus(
+        engine: ModelEngine,
+        selected: Bool,
+        downloading: Bool,
+        installationComplete: Bool,
+        hasInstalledFiles: Bool
+    ) -> (text: String, systemImage: String) {
+        if selected { return ("Current engine", "checkmark.circle.fill") }
+        if engine.id == ModelSelection.appleSpeechEngineID { return ("Available on this Mac", "checkmark.circle") }
+        if downloading { return ("Downloading…", "arrow.down.circle") }
+        if installationComplete { return ("Ready on this Mac", "checkmark.circle") }
+        if hasInstalledFiles { return ("Partly installed — finish the download below", "exclamationmark.circle") }
+        return ("Available to download", "arrow.down.circle")
+    }
+
     private func modelCard(_ engine: ModelEngine) -> some View {
         let ready = library.isReady(engine)
         let hasInstalledFiles = library.hasInstalledFiles(engineID: engine.id)
@@ -92,10 +109,14 @@ struct ModelLibraryView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(engine.displayName)
                             .font(.title2.weight(.semibold))
-                        Label(
-                            selected ? "Current engine" : engine.id == ModelSelection.appleSpeechEngineID ? "Available on this Mac" : ready ? "Ready on this Mac" : "Available to download",
-                            systemImage: selected ? "checkmark.circle.fill" : ready ? "checkmark.circle" : "arrow.down.circle"
+                        let status = installStatus(
+                            engine: engine,
+                            selected: selected,
+                            downloading: downloading,
+                            installationComplete: installationComplete,
+                            hasInstalledFiles: hasInstalledFiles
                         )
+                        Label(status.text, systemImage: status.systemImage)
                         .font(.subheadline)
                         .foregroundStyle(selected ? Color.accentColor : Color.secondary)
                         if engine.id == ModelLibraryViewModel.whisperEngineID {
