@@ -90,8 +90,13 @@ public final class ModelArtifactInstaller: @unchecked Sendable {
 
         let finalURL = modelsDirectory.appendingPathComponent(download.id, isDirectory: true)
         if isInstalled(download) { return finalURL }
-        guard !FileManager.default.fileExists(atPath: finalURL.path) else {
-            throw ModelArtifactInstallError.installationAlreadyExists(download.id)
+        if FileManager.default.fileExists(atPath: finalURL.path) {
+            // A folder without this app's marker (for example one left in the shared FluidAudio
+            // folder by an earlier version) is adopted only when every file matches the manifest.
+            guard try adoptVerifiedExistingInstallation(download, at: finalURL, progress: progress) else {
+                throw ModelArtifactInstallError.installationAlreadyExists(download.id)
+            }
+            return finalURL
         }
 
         try FileManager.default.createDirectory(at: modelsDirectory, withIntermediateDirectories: true)
@@ -140,7 +145,7 @@ public final class ModelArtifactInstaller: @unchecked Sendable {
             }
 
             let markerData = try JSONEncoder().encode(Self.marker(for: download))
-            try markerData.write(to: stagingURL.appendingPathComponent(".echoflow-installed.json"), options: .atomic)
+            try markerData.write(to: stagingURL.appendingPathComponent(Self.markerFileName), options: .atomic)
             try Task.checkCancellation()
             try FileManager.default.moveItem(at: stagingURL, to: finalURL)
             return finalURL
@@ -153,7 +158,7 @@ public final class ModelArtifactInstaller: @unchecked Sendable {
     public func isInstalled(_ download: ModelDownload) -> Bool {
         guard Self.isSafeIdentifier(download.id) else { return false }
         let installationURL = modelsDirectory.appendingPathComponent(download.id, isDirectory: true)
-        let markerURL = installationURL.appendingPathComponent(".echoflow-installed.json")
+        let markerURL = installationURL.appendingPathComponent(Self.markerFileName)
         guard let data = try? Data(contentsOf: markerURL),
               let marker = try? JSONDecoder().decode(InstalledModelMarker.self, from: data),
               marker == Self.marker(for: download) else {
@@ -275,6 +280,46 @@ public final class ModelArtifactInstaller: @unchecked Sendable {
         guard totalBytes == download.bytes else {
             throw ModelArtifactInstallError.invalidDownload(download.id)
         }
+    }
+
+    private static let markerFileName = ".echoflow-installed.json"
+
+    /// Verifies an existing, unmarked installation folder file by file (size and SHA-256) and,
+    /// only if every file matches, records the marker so it counts as installed. Nothing is
+    /// deleted or overwritten; a folder that does not verify is left exactly as it was.
+    private func adoptVerifiedExistingInstallation(
+        _ download: ModelDownload,
+        at installationURL: URL,
+        progress: (@Sendable (ModelInstallProgress) -> Void)?
+    ) throws -> Bool {
+        guard installationURL.standardizedFileURL.deletingLastPathComponent() == modelsDirectory else {
+            throw ModelArtifactInstallError.unsafeDestination(download.id)
+        }
+        var verifiedBytes = 0
+        for (index, file) in download.files.enumerated() {
+            try Task.checkCancellation()
+            let url = try destinationURL(for: file.destinationPath, inside: installationURL)
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+                  attributes[.type] as? FileAttributeType == .typeRegular else {
+                return false
+            }
+            let size = (attributes[.size] as? NSNumber)?.intValue ?? (attributes[.size] as? Int ?? -1)
+            guard size == file.size,
+                  try Self.sha256(of: url).caseInsensitiveCompare(file.sha256) == .orderedSame else {
+                return false
+            }
+            verifiedBytes += file.size
+            progress?(ModelInstallProgress(
+                verifiedFileCount: index + 1,
+                fileCount: download.files.count,
+                verifiedBytes: verifiedBytes,
+                totalBytes: download.bytes,
+                currentPath: file.destinationPath
+            ))
+        }
+        let markerData = try JSONEncoder().encode(Self.marker(for: download))
+        try markerData.write(to: installationURL.appendingPathComponent(Self.markerFileName), options: .atomic)
+        return isInstalled(download)
     }
 
     private static func marker(for download: ModelDownload) -> InstalledModelMarker {

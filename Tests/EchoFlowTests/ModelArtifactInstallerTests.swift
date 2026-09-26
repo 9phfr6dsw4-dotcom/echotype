@@ -129,6 +129,49 @@ final class ModelArtifactInstallerTests: XCTestCase {
         XCTAssertFalse(try installer.removeInstalled(download))
     }
 
+    func testExistingUnmarkedFolderIsAdoptedWhenEveryFileVerifies() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let download = modelDownload(files: [modelFile("weights.bin")])
+        let existingFile = root.appendingPathComponent("\(download.id)/weights/weights.bin")
+        try FileManager.default.createDirectory(at: existingFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fixture.write(to: existingFile)
+        let counter = FetchCounter()
+        let installer = ModelArtifactInstaller(modelsDirectory: root) { _, _ in
+            counter.increment()
+        }
+        XCTAssertFalse(installer.isInstalled(download))
+
+        let installedURL = try await installer.install(download)
+
+        XCTAssertEqual(counter.value, 0, "A verified existing folder must not be downloaded again")
+        XCTAssertTrue(installer.isInstalled(download))
+        XCTAssertEqual(try Data(contentsOf: installedURL.appendingPathComponent("weights/weights.bin")), fixture)
+    }
+
+    func testExistingUnmarkedFolderThatFailsVerificationIsLeftUntouched() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let download = modelDownload(files: [modelFile("weights.bin")])
+        let existingFile = root.appendingPathComponent("\(download.id)/weights/weights.bin")
+        try FileManager.default.createDirectory(at: existingFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let corrupted = Data(repeating: 0, count: fixture.count)
+        try corrupted.write(to: existingFile)
+        let installer = ModelArtifactInstaller(modelsDirectory: root) { _, _ in
+            XCTFail("An existing folder must not be overwritten by a download")
+        }
+
+        do {
+            _ = try await installer.install(download)
+            XCTFail("A folder whose files do not verify must not be adopted")
+        } catch let error as ModelArtifactInstallError {
+            XCTAssertEqual(error, .installationAlreadyExists(download.id))
+        }
+
+        XCTAssertFalse(installer.isInstalled(download))
+        XCTAssertEqual(try Data(contentsOf: existingFile), corrupted)
+    }
+
     func testRemovalRefusesAnUnverifiedDirectory() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
