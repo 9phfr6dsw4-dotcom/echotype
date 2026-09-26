@@ -29,6 +29,7 @@ struct EchoTypeSettingsView: View {
     private var recordingAudioOptions: RecordingAudioOptionsController { runtime.recordingAudioOptions }
     private var smartLinks: SmartLinksViewModel { runtime.smartLinks }
     private var launchAtLogin: LaunchAtLoginController { runtime.launchAtLogin }
+    private var textCleanup: TranscriptTextCleanupViewModel { runtime.textCleanup }
 
     var body: some View {
         ScrollView {
@@ -49,6 +50,7 @@ struct EchoTypeSettingsView: View {
                 localLearningSettings
                 customVocabularySettings
                 smartLinkSettings
+                textCleanupSettings
                 recordingBehaviorSettings
                 recordingAudioSettings
 
@@ -457,6 +459,95 @@ struct EchoTypeSettingsView: View {
         }
     }
 
+    private var textCleanupSettings: some View {
+        GroupBox("Text cleanup") {
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle("Remove filler words (um, uh, like)", isOn: Binding(
+                    get: { textCleanup.settings.removeFillerWords },
+                    set: { textCleanup.setRemoveFillerWords($0) }
+                ))
+                Toggle("Remove repeated false starts", isOn: Binding(
+                    get: { textCleanup.settings.removeFalseStarts },
+                    set: { textCleanup.setRemoveFalseStarts($0) }
+                ))
+                Toggle("Convert spoken numbers to digits", isOn: Binding(
+                    get: { textCleanup.settings.convertSpokenNumbersToDigits },
+                    set: { textCleanup.setConvertSpokenNumbers($0) }
+                ))
+                Text("These switches are off by default and use local text rules. “Like” is removed only in clear discourse-filler positions; words such as “I like this” are kept. Repeated words and phrases are treated as false starts when that option is on.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
+
+                Toggle("Use on-device Apple Intelligence cleanup", isOn: Binding(
+                    get: { textCleanup.settings.aiCleanupEnabled },
+                    set: { textCleanup.setAIEnabled($0) }
+                ))
+                Text("Optional grammar and punctuation cleanup runs through Apple's on-device Foundation Models framework. EchoType sends no transcript or audio to a server. If Apple Intelligence is unavailable, the request fails, or it takes over 3 seconds, EchoType pastes the original recognized text exactly, without applying these text rules.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(textCleanup.availabilityMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Style by app")
+                        .font(.subheadline.weight(.semibold))
+                    ForEach(textCleanup.settings.applicationProfiles.sorted { $0.displayName < $1.displayName }) { profile in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(profile.displayName)
+                                Text(profile.bundleIdentifier)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("\(profile.displayName) style", selection: Binding(
+                                get: { profile.style },
+                                set: { textCleanup.setStyle($0, for: profile) }
+                            )) {
+                                ForEach(AppTranscriptWritingStyle.allCases) { style in
+                                    Text(style.displayName).tag(style)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 150)
+                            if !TranscriptTextCleanupSettings.defaultApplicationProfiles.contains(where: {
+                                $0.bundleIdentifier.caseInsensitiveCompare(profile.bundleIdentifier) == .orderedSame
+                            }) {
+                                Button("Reset") {
+                                    textCleanup.removeProfile(profile)
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("Reset \(profile.displayName) style to Clean")
+                            }
+                        }
+                    }
+                    Text("Messages defaults to Casual, Obsidian and Claude to Clean, and Terminal to No changes. No changes bypasses all Batch 2 processing for that app. Apps not listed default to Clean; add or adjust a style below.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Add Installed App…", action: chooseTextCleanupApplication)
+                        .disabled(!textCleanup.canMutate)
+                }
+
+                if let errorMessage = textCleanup.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+            }
+            .disabled(!textCleanup.canMutate)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
+    }
+
     private var recordingBehaviorSettings: some View {
         GroupBox("Recording behavior") {
             VStack(alignment: .leading, spacing: 10) {
@@ -707,6 +798,18 @@ struct EchoTypeSettingsView: View {
         }
         guard panel.runModal() == .OK, let url = panel.url else { return }
         history.archiveDirectoryPath = url.path
+    }
+
+    private func chooseTextCleanupApplication() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose an Installed App for Text Cleanup"
+        panel.prompt = "Add App"
+        panel.allowedContentTypes = [.application]
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        textCleanup.addApplication(at: url)
     }
 
     private func chooseExcludedApplication() {

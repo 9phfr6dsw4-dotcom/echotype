@@ -20,6 +20,7 @@ final class EchoTypeRuntime {
     let recordingAudioOptions: RecordingAudioOptionsController
     let smartLinks: SmartLinksViewModel
     let launchAtLogin: LaunchAtLoginController
+    let textCleanup: TranscriptTextCleanupViewModel
 
     var deliveryMessage: String?
     var deliveryDebugInfo: String?
@@ -49,6 +50,7 @@ final class EchoTypeRuntime {
         let customVocabulary = CustomVocabularyViewModel()
         let smartLinks = SmartLinksViewModel()
         let launchAtLogin = LaunchAtLoginController()
+        let textCleanup = TranscriptTextCleanupViewModel()
         let excludedApplications = ExcludedApplicationsViewModel()
         let overlayModel = RecordingOverlayModel()
         let recordingFeedback = RecordingFeedbackController()
@@ -65,6 +67,7 @@ final class EchoTypeRuntime {
         self.recordingAudioOptions = recordingAudioOptions
         self.smartLinks = smartLinks
         self.launchAtLogin = launchAtLogin
+        self.textCleanup = textCleanup
         self.hotkey = GlobalHotkeyController()
         self.textInsertion = TextInsertionService()
         self.overlayWindow = RecordingOverlayWindowController(model: overlayModel)
@@ -235,7 +238,11 @@ final class EchoTypeRuntime {
         recordingAudioOptions.stopRecording()
         recordingFeedback.recordingStopped()
         await dictation.stopAndTranscribe(saveAudio: history.settings.historyEnabled && history.settings.saveAudio)
-        let finalTranscript = smartLinks.applying(to: dictation.transcript)
+        let transcriptAfterCleanup = await textCleanup.cleanedText(
+            dictation.transcript,
+            targetBundleIdentifier: insertionTargetAtStop?.snapshot.bundleIdentifier
+        )
+        let finalTranscript = smartLinks.applying(to: transcriptAfterCleanup)
         finalTranscriptOverride = finalTranscript
         overlayModel.transcript = finalTranscript
         let duration = max(0, Date().timeIntervalSince(recordingStartedAt ?? Date()))
