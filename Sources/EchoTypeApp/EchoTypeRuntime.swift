@@ -703,6 +703,13 @@ final class EchoTypeRuntime {
     private func synchronizeOverlay(with dictation: SpeechDictationViewModel) {
         overlayModel.transcript = finalTranscriptOverride ?? dictation.transcript
 
+        // Recording can also end without a hotkey (for example a microphone error); the dock
+        // badge, stop cue, and music/volume changes follow the overlay in every case.
+        if !dictation.isRecording, recordingFeedback.isRecording {
+            recordingAudioOptions.stopRecording()
+            recordingFeedback.recordingStopped()
+        }
+
         if dictation.isRecording {
             dismissOverlayTask?.cancel()
             overlayModel.phase = .recording

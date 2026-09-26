@@ -13,7 +13,7 @@ final class RecordingFeedbackController {
     private(set) var isRecording = false
 
     @ObservationIgnored private let defaults: UserDefaults
-    @ObservationIgnored private var originalDockIcon: NSImage?
+    @ObservationIgnored private var isShowingRecordingDockIcon = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -35,7 +35,8 @@ final class RecordingFeedbackController {
         isRecording = false
         restoreDockIcon()
         if defaults.bool(forKey: Self.soundsPreferenceKey) {
-            playSound(named: "Pop")
+            // The same soft sound as the start cue; the sharper "Pop" was unwelcome at stop.
+            playSound(named: "Tink")
         }
     }
 
@@ -49,10 +50,12 @@ final class RecordingFeedbackController {
     }
 
     private func applyRecordingDockIcon() {
-        guard originalDockIcon == nil else { return }
+        guard !isShowingRecordingDockIcon else { return }
         let application = NSApplication.shared
-        guard let original = application.applicationIconImage else { return }
-        originalDockIcon = original
+        // Draw from a copy: the getter returns AppKit's shared application icon, which takes on
+        // the badged image once it is set, so it cannot be saved and put back later.
+        guard let original = application.applicationIconImage?.copy() as? NSImage else { return }
+        isShowingRecordingDockIcon = true
 
         let image = NSImage(size: original.size)
         image.lockFocus()
@@ -82,9 +85,10 @@ final class RecordingFeedbackController {
     }
 
     private func restoreDockIcon() {
-        guard let originalDockIcon else { return }
-        NSApplication.shared.applicationIconImage = originalDockIcon
-        self.originalDockIcon = nil
+        guard isShowingRecordingDockIcon else { return }
+        isShowingRecordingDockIcon = false
+        // nil restores the bundle's AppIcon.icns.
+        NSApplication.shared.applicationIconImage = nil
     }
 
     private func playSound(named name: String) {
