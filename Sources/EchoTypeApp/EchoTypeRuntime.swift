@@ -126,6 +126,11 @@ final class EchoTypeRuntime {
         hotkey.onStopVoiceRewriteRecording = { [weak self] in
             self?.stopOrCancelHotkeyRecording(for: .rewrite)
         }
+        hotkey.isVoiceActionInProgress = { [weak self] kind in
+            guard let self else { return false }
+            return self.pendingRecordingActionKind == kind
+                || (self.dictation.isRecording && self.activeRecordingAction.kind == kind)
+        }
         workspaceActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
@@ -353,9 +358,9 @@ final class EchoTypeRuntime {
             case .dictation:
                 break
             case .voiceMemo:
-                deliveryMessage = "Voice Memo recording — release the shortcut to save."
+                deliveryMessage = "Voice Memo recording — tap \(hotkey.selectedKeyName) or press \(hotkey.voiceMemoShortcut.displayLabel ?? "the Voice Memo shortcut") again to save."
             case .rewrite:
-                deliveryMessage = "Voice Rewrite recording — speak the editing instruction, then release."
+                deliveryMessage = "Voice Rewrite recording — speak the editing instruction, then tap \(hotkey.selectedKeyName) or press \(hotkey.rewriteShortcut.displayLabel ?? "the Rewrite shortcut") again."
             }
             overlayModel.deliveryMessage = deliveryMessage
             recordingAudioOptions.startRecording()

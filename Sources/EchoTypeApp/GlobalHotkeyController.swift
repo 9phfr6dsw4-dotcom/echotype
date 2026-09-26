@@ -82,6 +82,9 @@ final class GlobalHotkeyController {
     var onStopVoiceMemoRecording: (@MainActor () -> Void)?
     var onStartVoiceRewriteRecording: (@MainActor () -> Bool)?
     var onStopVoiceRewriteRecording: (@MainActor () -> Void)?
+    /// Reports whether a voice action is still starting or recording, so a latch whose
+    /// start failed is not left waiting for a stop.
+    var isVoiceActionInProgress: (@MainActor (RecordingActionKind) -> Bool)?
 
     @ObservationIgnored private var globalMonitor: Any?
     @ObservationIgnored private var localMonitor: Any?
@@ -90,8 +93,7 @@ final class GlobalHotkeyController {
     @ObservationIgnored private var voiceMemoShortcutRecognizer: KeyboardShortcutRecognizer?
     @ObservationIgnored private var rewriteShortcutRecognizer: KeyboardShortcutRecognizer?
     @ObservationIgnored private var isHoldRecordingActive = false
-    @ObservationIgnored private var isVoiceMemoHoldActive = false
-    @ObservationIgnored private var isVoiceRewriteHoldActive = false
+    @ObservationIgnored private var latchedVoiceAction: RecordingActionKind?
     @ObservationIgnored private var lastKeyboardEventDescription: String?
     @ObservationIgnored private var lastRecognizedAction: String?
     @ObservationIgnored private let defaults: UserDefaults
@@ -248,7 +250,7 @@ final class GlobalHotkeyController {
         return true
     }
 
-    /// Stores a Voice Memo hold-to-talk chord distinct from the other configured shortcuts.
+    /// Stores a tap-to-latch Voice Memo chord distinct from the other configured shortcuts.
     @discardableResult
     func chooseVoiceMemoShortcut(_ shortcut: KeyboardShortcutDescriptor) -> Bool {
         guard Self.isCustomKeyCode(shortcut.keyCode),
@@ -264,7 +266,7 @@ final class GlobalHotkeyController {
         return true
     }
 
-    /// Stores a Rewrite hold-to-talk chord distinct from the other configured shortcuts.
+    /// Stores a tap-to-latch Rewrite chord distinct from the other configured shortcuts.
     @discardableResult
     func chooseRewriteShortcut(_ shortcut: KeyboardShortcutDescriptor) -> Bool {
         guard Self.isCustomKeyCode(shortcut.keyCode),
@@ -427,12 +429,12 @@ final class GlobalHotkeyController {
             if var voiceMemoShortcutRecognizer {
                 let action = voiceMemoShortcutRecognizer.consume(keyDownEvent)
                 self.voiceMemoShortcutRecognizer = voiceMemoShortcutRecognizer
-                dispatchVoiceMemo(action)
+                dispatchVoiceChord(action, for: .voiceMemo)
             }
             if var rewriteShortcutRecognizer {
                 let action = rewriteShortcutRecognizer.consume(keyDownEvent)
                 self.rewriteShortcutRecognizer = rewriteShortcutRecognizer
-                dispatchVoiceRewrite(action)
+                dispatchVoiceChord(action, for: .rewrite)
             }
 
         case let .keyUp(keyCode):
@@ -445,12 +447,12 @@ final class GlobalHotkeyController {
             if var voiceMemoShortcutRecognizer {
                 let action = voiceMemoShortcutRecognizer.consume(keyUpEvent)
                 self.voiceMemoShortcutRecognizer = voiceMemoShortcutRecognizer
-                dispatchVoiceMemo(action)
+                dispatchVoiceChord(action, for: .voiceMemo)
             }
             if var rewriteShortcutRecognizer {
                 let action = rewriteShortcutRecognizer.consume(keyUpEvent)
                 self.rewriteShortcutRecognizer = rewriteShortcutRecognizer
-                dispatchVoiceRewrite(action)
+                dispatchVoiceChord(action, for: .rewrite)
             }
         }
         refreshStatusMessage()
@@ -500,51 +502,82 @@ final class GlobalHotkeyController {
     }
 
     private func stopActiveVoiceActionsIfNeeded() {
-        if isVoiceMemoHoldActive {
-            isVoiceMemoHoldActive = false
-            onStopVoiceMemoRecording?()
-        }
-        if isVoiceRewriteHoldActive {
-            isVoiceRewriteHoldActive = false
-            onStopVoiceRewriteRecording?()
-        }
+        guard let latchedVoiceAction else { return }
+        stopLatchedVoiceAction(latchedVoiceAction)
     }
 
-    private func dispatchVoiceMemo(_ action: ModifierHotkeyAction?) {
-        switch action {
-        case .startRecording:
-            guard onStartVoiceMemoRecording?() == true else { return }
-            lastRecognizedAction = "start voice memo"
-            isVoiceMemoHoldActive = true
-        case .stopRecording:
-            guard isVoiceMemoHoldActive else { return }
+    /// Returns the latched voice action, clearing the latch if that action is no longer starting or recording.
+    private func validatedLatchedVoiceAction() -> RecordingActionKind? {
+        guard let latchedVoiceAction else { return nil }
+        guard isVoiceActionInProgress?(latchedVoiceAction) ?? true else {
+            self.latchedVoiceAction = nil
+            return nil
+        }
+        return latchedVoiceAction
+    }
+
+    /// Voice chords latch: a press starts the action, and the action keeps recording after the
+    /// chord is released until the same chord is pressed again or the Dictation hotkey is tapped.
+    private func dispatchVoiceChord(_ action: ModifierHotkeyAction?, for kind: RecordingActionKind) {
+        // The hold-to-talk recognizer reports a fresh press as .startRecording; releases are ignored.
+        guard case .startRecording = action else { return }
+        switch VoiceActionLatchPolicy.voiceChordPressed(kind, latched: validatedLatchedVoiceAction()) {
+        case let .start(kind):
+            startLatchedVoiceAction(kind)
+        case let .stop(kind):
+            stopLatchedVoiceAction(kind)
+        case .ignore, .passThrough:
+            break
+        }
+        refreshStatusMessage()
+    }
+
+    private func startLatchedVoiceAction(_ kind: RecordingActionKind) {
+        let started: Bool
+        switch kind {
+        case .voiceMemo:
+            started = onStartVoiceMemoRecording?() == true
+        case .rewrite:
+            started = onStartVoiceRewriteRecording?() == true
+        case .dictation:
+            started = false
+        }
+        guard started else { return }
+        latchedVoiceAction = kind
+        lastRecognizedAction = kind == .voiceMemo ? "start voice memo" : "start voice rewrite"
+    }
+
+    private func stopLatchedVoiceAction(_ kind: RecordingActionKind) {
+        guard latchedVoiceAction == kind else { return }
+        latchedVoiceAction = nil
+        switch kind {
+        case .voiceMemo:
             lastRecognizedAction = "stop voice memo"
-            isVoiceMemoHoldActive = false
             onStopVoiceMemoRecording?()
-        case .toggleRecording, nil:
-            break
-        }
-        refreshStatusMessage()
-    }
-
-    private func dispatchVoiceRewrite(_ action: ModifierHotkeyAction?) {
-        switch action {
-        case .startRecording:
-            guard onStartVoiceRewriteRecording?() == true else { return }
-            lastRecognizedAction = "start voice rewrite"
-            isVoiceRewriteHoldActive = true
-        case .stopRecording:
-            guard isVoiceRewriteHoldActive else { return }
+        case .rewrite:
             lastRecognizedAction = "stop voice rewrite"
-            isVoiceRewriteHoldActive = false
             onStopVoiceRewriteRecording?()
-        case .toggleRecording, nil:
+        case .dictation:
             break
         }
-        refreshStatusMessage()
     }
 
     private func dispatch(_ action: ModifierHotkeyAction?) {
+        switch action {
+        case .toggleRecording, .startRecording:
+            // A latched Voice Memo or Rewrite is stopped by the Dictation hotkey instead of
+            // starting dictation. In hold-to-talk mode the matching release is then ignored
+            // because no dictation hold was started.
+            if case let .stop(kind) = VoiceActionLatchPolicy.dictationHotkeyPressed(
+                latched: validatedLatchedVoiceAction()
+            ) {
+                stopLatchedVoiceAction(kind)
+                refreshStatusMessage()
+                return
+            }
+        case .stopRecording, nil:
+            break
+        }
         switch action {
         case .toggleRecording:
             lastRecognizedAction = "toggle dictation"

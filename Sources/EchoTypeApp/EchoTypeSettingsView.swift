@@ -464,7 +464,7 @@ struct EchoTypeSettingsView: View {
     private var voiceActionsSettings: some View {
         GroupBox("Voice actions") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("These hold-to-talk shortcuts are separate from Dictation. Hold a shortcut while speaking, then release it to finish that action. Shortcuts also reach the frontmost app, so change a chord if that app already uses it.")
+                Text("These shortcuts are separate from Dictation. Press a shortcut once to start recording; it keeps recording after you let go. Tap your Dictation hotkey (\(runtime.hotkey.selectedKeyName)) or press the same shortcut again to finish. Shortcuts also reach the frontmost app, so change a chord if that app already uses it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -489,7 +489,7 @@ struct EchoTypeSettingsView: View {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Rewrite: \(runtime.hotkey.rewriteShortcut.displayLabel ?? "Key \\(runtime.hotkey.rewriteShortcut.keyCode)")")
-                        Text("Select text, hold the shortcut, and speak an editing instruction.")
+                        Text("Select text, press the shortcut, and speak an editing instruction.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
