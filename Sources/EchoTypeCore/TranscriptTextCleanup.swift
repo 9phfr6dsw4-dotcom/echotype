@@ -465,7 +465,7 @@ public enum TranscriptTextCleanupPolicy {
         let magnitude = abs(value)
         let lastTwoDigits = magnitude % 100
         if (11...13).contains(lastTwoDigits) { return "th" }
-        switch magnitude % 10 {
+        return switch magnitude % 10 {
         case 1: "st"
         case 2: "nd"
         case 3: "rd"
