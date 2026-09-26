@@ -38,7 +38,7 @@ struct EchoTypeSettingsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Settings")
                         .font(.largeTitle.weight(.semibold))
-                    Text("Keep control over local data and where EchoType can dictate.")
+                    Text("Keep control over local data and where EchoFlow can dictate.")
                         .font(.title3)
                         .foregroundStyle(.secondary)
                 }
@@ -56,7 +56,7 @@ struct EchoTypeSettingsView: View {
                 recordingBehaviorSettings
                 recordingAudioSettings
 
-                Label("Speech and transcripts stay on this Mac. EchoType does not use accounts, analytics, or cloud transcription.", systemImage: "lock.shield")
+                Label("Speech and transcripts stay on this Mac. EchoFlow does not use accounts, analytics, or cloud transcription.", systemImage: "lock.shield")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -66,7 +66,7 @@ struct EchoTypeSettingsView: View {
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .confirmationDialog(
-            "Clear all EchoType transcript data?",
+            "Clear all EchoFlow transcript data?",
             isPresented: $showingClearConfirmation,
             titleVisibility: .visible
         ) {
@@ -79,7 +79,7 @@ struct EchoTypeSettingsView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes EchoType transcript history and audio recordings, but does not delete Markdown archive files in your chosen folder or learned words. Files outside EchoType's transcript store are kept.")
+            Text("This removes EchoFlow transcript history and audio recordings, but does not delete Markdown archive files in your chosen folder or learned words. Files outside EchoFlow's transcript store are kept.")
         }
         .onAppear {
             runtime.overlayModel.showLiveWords = showLiveWords
@@ -105,11 +105,11 @@ struct EchoTypeSettingsView: View {
     private var launchAtLoginSettings: some View {
         GroupBox("Startup") {
             VStack(alignment: .leading, spacing: 8) {
-                Toggle("Launch EchoType at login", isOn: Binding(
+                Toggle("Launch EchoFlow at login", isOn: Binding(
                     get: { launchAtLogin.isEnabled },
                     set: { launchAtLogin.setEnabled($0) }
                 ))
-                Text("On by default for a new installation. macOS may ask you to approve EchoType in System Settings → General → Login Items & Extensions.")
+                Text("On by default for a new installation. macOS may ask you to approve EchoFlow in System Settings → General → Login Items & Extensions.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -157,7 +157,7 @@ struct EchoTypeSettingsView: View {
                         else { history.archiveDirectoryPath = nil }
                     }
                 ))
-                Text("Markdown archiving is independent of local history and retention. When a folder is selected, each recognized transcript is archived there even if local history is off; clearing EchoType history does not delete those archive files.")
+                Text("Markdown archiving is independent of local history and retention. When a folder is selected, each recognized transcript is archived there even if local history is off; clearing EchoFlow history does not delete those archive files.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -216,7 +216,7 @@ struct EchoTypeSettingsView: View {
                         Text("\(language.name) (\(language.code))").tag(language.code)
                     }
                 }
-                Text("The pinned language is passed to the selected engine. The list shows Parakeet v3's supported languages; Automatic uses your Mac's current language for Apple Speech and Whisper. If Parakeet cannot support the selected or automatic language, EchoType shows an error instead of silently switching.")
+                Text("The pinned language is passed to the selected engine. The list shows Parakeet v3's supported languages; Automatic uses your Mac's current language for Apple Speech and Whisper. If Parakeet cannot support the selected or automatic language, EchoFlow shows an error instead of silently switching.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -229,7 +229,7 @@ struct EchoTypeSettingsView: View {
     private var excludedApplicationsSettings: some View {
         GroupBox("Excluded apps") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("EchoType will not record or insert text while an excluded app is active. Password managers are excluded by default.")
+                Text("EchoFlow will not record or insert text while an excluded app is active. Password managers are excluded by default.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -279,10 +279,10 @@ struct EchoTypeSettingsView: View {
         GroupBox("Local learning") {
             VStack(alignment: .leading, spacing: 12) {
                 Toggle(
-                    "Learn corrections made to recent EchoType insertions",
+                    "Learn corrections made to recent EchoFlow insertions",
                     isOn: $learnRecentInsertionCorrections
                 )
-                Text("Off by default. When enabled, EchoType watches the same field it just inserted into for up to 10 seconds. It considers only a selected range wholly inside that insertion, waits 800 ms after a value change, and reads only the validated replacement range. It never reads whole-field text, window titles, URLs, secure fields, or excluded apps. If Accessibility range, notification, or target checks are unavailable or ambiguous, nothing is learned. Accepted one-word corrections use the existing local-learning rule and need at least three repeats.")
+                Text("Off by default. When enabled, EchoFlow watches the same field it just inserted into for up to 10 seconds. It considers only a selected range wholly inside that insertion, waits 800 ms after a value change, and reads only the validated replacement range. It never reads whole-field text, window titles, URLs, secure fields, or excluded apps. If Accessibility range, notification, or target checks are unavailable or ambiguous, nothing is learned. Accepted one-word corrections use the existing local-learning rule and need at least three repeats.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -291,7 +291,7 @@ struct EchoTypeSettingsView: View {
                     get: { learning.askBeforeAdding },
                     set: { learning.askBeforeAdding = $0 }
                 ))
-                Text("EchoType learns only from explicit corrections you save in transcript history. The same correction must appear at least three times; short common words are ignored. Learned words stay on this Mac and are kept when transcript history is cleared.")
+                Text("EchoFlow learns only from explicit corrections you save in transcript history. The same correction must appear at least three times; short common words are ignored. Learned words stay on this Mac and are kept when transcript history is cleared.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -326,7 +326,7 @@ struct EchoTypeSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 if learning.store.learnedTerms.isEmpty {
-                    Text("No learned words yet. Correct and save a transcript to teach EchoType.")
+                    Text("No learned words yet. Correct and save a transcript to teach EchoFlow.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -408,7 +408,7 @@ struct EchoTypeSettingsView: View {
     private var smartLinkSettings: some View {
         GroupBox("Smart links") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Save a phrase and its link. When you say the phrase, EchoType replaces it with the URL in the final transcript before saving or inserting it. Matching is case-insensitive and only replaces the complete phrase. This works locally with every speech engine.")
+                Text("Save a phrase and its link. When you say the phrase, EchoFlow replaces it with the URL in the final transcript before saving or inserting it. Matching is case-insensitive and only replaces the complete phrase. This works locally with every speech engine.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -464,7 +464,7 @@ struct EchoTypeSettingsView: View {
     private var voiceActionsSettings: some View {
         GroupBox("Voice actions") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("These shortcuts are separate from Dictation. Press a shortcut once to start recording; it keeps recording after you let go. Tap your Dictation hotkey (\(runtime.hotkey.selectedKeyName)) or press the same shortcut again to finish. While EchoType is running these chords belong to EchoType, so other apps no longer receive them; change a chord if you need it in another app.")
+                Text("These shortcuts are separate from Dictation. Press a shortcut once to start recording; it keeps recording after you let go. Tap your Dictation hotkey (\(runtime.hotkey.selectedKeyName)) or press the same shortcut again to finish. While EchoFlow is running these chords belong to EchoFlow, so other apps no longer receive them; change a chord if you need it in another app.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -479,7 +479,7 @@ struct EchoTypeSettingsView: View {
                     Spacer()
                     KeyboardShortcutCaptureButton(title: "Change Voice Memo Hotkey…") { shortcut in
                         guard runtime.hotkey.chooseVoiceMemoShortcut(shortcut) else {
-                            voiceActionShortcutError = "Choose a chord that differs from Dictation, Rewrite, and the other EchoType hotkeys."
+                            voiceActionShortcutError = "Choose a chord that differs from Dictation, Rewrite, and the other EchoFlow hotkeys."
                             return
                         }
                         voiceActionShortcutError = nil
@@ -496,7 +496,7 @@ struct EchoTypeSettingsView: View {
                     Spacer()
                     KeyboardShortcutCaptureButton(title: "Change Rewrite Hotkey…") { shortcut in
                         guard runtime.hotkey.chooseRewriteShortcut(shortcut) else {
-                            voiceActionShortcutError = "Choose a chord that differs from Dictation, Voice Memo, and the other EchoType hotkeys."
+                            voiceActionShortcutError = "Choose a chord that differs from Dictation, Voice Memo, and the other EchoFlow hotkeys."
                             return
                         }
                         voiceActionShortcutError = nil
@@ -530,7 +530,7 @@ struct EchoTypeSettingsView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("EchoType saves a separate date-and-time-named .md file in this folder. It does not paste the memo into the frontmost app or add it to transcript history.")
+                Text("EchoFlow saves a separate date-and-time-named .md file in this folder. It does not paste the memo into the frontmost app or add it to transcript history.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -583,7 +583,7 @@ struct EchoTypeSettingsView: View {
                     get: { textCleanup.settings.aiCleanupEnabled },
                     set: { textCleanup.setAIEnabled($0) }
                 ))
-                Text("Optional grammar and punctuation cleanup runs through Apple's on-device Foundation Models framework. EchoType sends no transcript or audio to a server. If Apple Intelligence is unavailable, the request fails, or it takes over 3 seconds, EchoType inserts the original recognized text exactly, without applying these text rules.")
+                Text("Optional grammar and punctuation cleanup runs through Apple's on-device Foundation Models framework. EchoFlow sends no transcript or audio to a server. If Apple Intelligence is unavailable, the request fails, or it takes over 3 seconds, EchoFlow inserts the original recognized text exactly, without applying these text rules.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -661,7 +661,7 @@ struct EchoTypeSettingsView: View {
                 }
                 Toggle("Keep microphone on between recordings (instant-on)", isOn: .constant(false))
                     .disabled(true)
-                    .accessibilityHint("Unavailable in this build; EchoType never leaves the microphone active between recordings.")
+                    .accessibilityHint("Unavailable in this build; EchoFlow never leaves the microphone active between recordings.")
                 Text("These cues are off by default. The overlay can show only a recording indicator when live words are hidden; temporary audio is still deleted after transcription unless audio saving is enabled above.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -693,7 +693,7 @@ struct EchoTypeSettingsView: View {
                     .disabled(!recordingAudioOptions.lowerOutputVolumeWhenRecording)
                 }
 
-                Text("Media controls are optional and may require macOS Automation permission. Only Music and Spotify are controlled; browser media is not. EchoType restores the saved output volume when recording ends. Instant-on microphone is unavailable in this build, so EchoType never leaves it active between sessions.")
+                Text("Media controls are optional and may require macOS Automation permission. Only Music and Spotify are controlled; browser media is not. EchoFlow restores the saved output volume when recording ends. Instant-on microphone is unavailable in this build, so EchoFlow never leaves it active between sessions.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

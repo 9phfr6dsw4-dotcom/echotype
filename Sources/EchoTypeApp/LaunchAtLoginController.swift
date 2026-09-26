@@ -41,17 +41,17 @@ final class LaunchAtLoginController {
         case .enabled:
             statusMessage = nil
         case .requiresApproval:
-            statusMessage = "macOS needs your approval. Open Login Items and allow EchoType."
+            statusMessage = "macOS needs your approval. Open Login Items and allow EchoFlow."
         case .notRegistered:
             statusMessage = isEnabled
-                ? "Launch at login is selected but is not active. Enable EchoType in Login Items, or turn this option off and on to retry."
+                ? "Launch at login is selected but is not active. Enable EchoFlow in Login Items, or turn this option off and on to retry."
                 : nil
         case .notFound:
             statusMessage = isEnabled
-                ? "macOS could not find an eligible EchoType login item. Check Login Items and make sure you're using the installed app."
+                ? "macOS could not find an eligible EchoFlow login item. Check Login Items and make sure you're using the installed app."
                 : nil
         @unknown default:
-            statusMessage = "macOS could not confirm EchoType's login-item status."
+            statusMessage = "macOS could not confirm EchoFlow's login-item status."
         }
     }
 

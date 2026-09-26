@@ -1,4 +1,4 @@
-name: EchoType CI
+name: EchoFlow CI
 
 on:
   push:
@@ -36,10 +36,10 @@ jobs:
         run: bash Scripts/smoke-test.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: EchoType-${{ github.run_number }}
+          name: EchoFlow-${{ github.run_number }}
           path: |
-            dist/EchoType.zip
-            dist/EchoType.zip.sha256
+            dist/EchoFlow.zip
+            dist/EchoFlow.zip.sha256
           if-no-files-found: error
           retention-days: 30
   whisper-benchmark:

@@ -19,7 +19,7 @@ final class LocalLearningViewModel {
         } catch {
             self.store = LocalLearningStore()
             self.canPersist = false
-            self.errorMessage = "Saved local learning data could not be read. EchoType will not overwrite it: \(error.localizedDescription)"
+            self.errorMessage = "Saved local learning data could not be read. EchoFlow will not overwrite it: \(error.localizedDescription)"
         }
     }
 

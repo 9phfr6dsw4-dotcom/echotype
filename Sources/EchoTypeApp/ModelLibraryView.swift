@@ -134,7 +134,7 @@ struct ModelLibraryView: View {
                         detailRow("Already installed", "Parakeet vocabulary files are verified; only missing model files need downloading.")
                     }
                 } else if engine.id == ModelSelection.appleSpeechEngineID {
-                    detailRow("Speech assets", "Managed by macOS; EchoType checks installation at launch. Choose Prepare Apple Speech to install missing assets.")
+                    detailRow("Speech assets", "Managed by macOS; EchoFlow checks installation at launch. Choose Prepare Apple Speech to install missing assets.")
                 } else {
                     detailRow("Download", "No model download required")
                 }

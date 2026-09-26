@@ -224,7 +224,7 @@ final class SpeechDictationViewModel {
         let hasMicrophoneAccess = await microphoneAccessGranted()
         guard shouldContinueStarting() else { return }
         guard hasMicrophoneAccess else {
-            errorMessage = "Microphone access is off. Allow EchoType in System Settings → Privacy & Security → Microphone."
+            errorMessage = "Microphone access is off. Allow EchoFlow in System Settings → Privacy & Security → Microphone."
             return
         }
 
@@ -338,7 +338,7 @@ final class SpeechDictationViewModel {
                 resultsTask.cancel()
                 try? FileManager.default.removeItem(at: url)
                 if !microphoneAuthorized {
-                    errorMessage = "Microphone access was revoked before recording started. Allow EchoType in System Settings → Privacy & Security → Microphone."
+                    errorMessage = "Microphone access was revoked before recording started. Allow EchoFlow in System Settings → Privacy & Security → Microphone."
                 }
                 return
             }
@@ -380,7 +380,7 @@ final class SpeechDictationViewModel {
         let hasMicrophoneAccess = await microphoneAccessGranted()
         guard shouldContinueStarting() else { return }
         guard hasMicrophoneAccess else {
-            errorMessage = "Microphone access is off. Allow EchoType in System Settings → Privacy & Security → Microphone."
+            errorMessage = "Microphone access is off. Allow EchoFlow in System Settings → Privacy & Security → Microphone."
             return
         }
         let engine = AVAudioEngine()
@@ -427,7 +427,7 @@ final class SpeechDictationViewModel {
                 engine.stop()
                 try? FileManager.default.removeItem(at: url)
                 if !microphoneAuthorized {
-                    errorMessage = "Microphone access was revoked before recording started. Allow EchoType in System Settings → Privacy & Security → Microphone."
+                    errorMessage = "Microphone access was revoked before recording started. Allow EchoFlow in System Settings → Privacy & Security → Microphone."
                 }
                 return
             }

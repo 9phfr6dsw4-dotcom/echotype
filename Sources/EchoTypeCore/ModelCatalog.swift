@@ -8,9 +8,9 @@ public enum ModelCatalogError: Error, Equatable, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .bundledResourcesMissing:
-            return "The EchoType model resource bundle is missing from the app. Reinstall EchoType from the official release."
+            return "The EchoFlow model resource bundle is missing from the app. Reinstall EchoFlow from the official release."
         case .bundledManifestMissing:
-            return "The model catalog file is missing from the EchoType app bundle. Reinstall EchoType from the official release."
+            return "The model catalog file is missing from the EchoFlow app bundle. Reinstall EchoFlow from the official release."
         case .invalidManifest(let reason): return "Invalid model manifest: \(reason)"
         }
     }

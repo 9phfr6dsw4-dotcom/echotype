@@ -191,7 +191,7 @@ final class TranscriptHistoryStoreTests: XCTestCase {
         XCTAssertTrue(markdown.contains("Archive this sentence."))
         XCTAssertTrue(markdown.contains("whisper-local"))
         XCTAssertTrue(markdown.contains("12.5"))
-        XCTAssertTrue(markdown.contains("EchoType Transcript Archive"))
+        XCTAssertTrue(markdown.contains("EchoFlow Transcript Archive"))
     }
 
     func testMarkdownArchiveRejectsDirectoryThatDoesNotAlreadyExist() throws {

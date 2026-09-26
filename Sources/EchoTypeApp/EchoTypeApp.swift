@@ -21,7 +21,7 @@ struct EchoTypeApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("EchoType") {
+        WindowGroup("EchoFlow") {
             TabView {
                 HomeView()
                     .tabItem { Label("Home", systemImage: "house") }
@@ -31,7 +31,7 @@ struct EchoTypeApp: App {
                     .tabItem { Label("Settings", systemImage: "gearshape") }
             }
             .environment(runtime)
-            .navigationTitle("EchoType")
+            .navigationTitle("EchoFlow")
             .task(id: speechPreparationTaskIdentifier) {
                 guard runtime.modelLibrary.selectedEngineID == ModelSelection.appleSpeechEngineID else { return }
                 await runtime.dictation.checkAppleSpeechAssets(localeIdentifier: speechLocaleIdentifier)

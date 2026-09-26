@@ -13,7 +13,7 @@ struct HomeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("EchoType")
+                    Text("EchoFlow")
                         .font(.largeTitle.weight(.semibold))
                     Text("Private, on-device dictation")
                         .font(.title3)
@@ -38,11 +38,11 @@ struct HomeView: View {
     private var launchAtLoginWelcome: some View {
         GroupBox("A small startup choice") {
             VStack(alignment: .leading, spacing: 10) {
-                Toggle("Launch EchoType at login", isOn: Binding(
+                Toggle("Launch EchoFlow at login", isOn: Binding(
                     get: { launchAtLogin.isEnabled },
                     set: { launchAtLogin.setEnabled($0) }
                 ))
-                Text("This is on by default. macOS may ask you to approve EchoType in Login Items; you can change this later in Settings.")
+                Text("This is on by default. macOS may ask you to approve EchoFlow in Login Items; you can change this later in Settings.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

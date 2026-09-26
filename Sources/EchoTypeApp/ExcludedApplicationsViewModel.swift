@@ -25,7 +25,7 @@ final class ExcludedApplicationsViewModel {
     func addApplication(at url: URL) {
         guard let bundleIdentifier = Bundle(url: url)?.bundleIdentifier,
               !bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "EchoType could not read an app bundle identifier from that application."
+            errorMessage = "EchoFlow could not read an app bundle identifier from that application."
             return
         }
         let displayName = (try? url.resourceValues(forKeys: [.localizedNameKey]).localizedName)

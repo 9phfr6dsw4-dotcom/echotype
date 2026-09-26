@@ -16,7 +16,7 @@ public struct AppleSpeechTranscriber: Sendable {
             case .unsupportedLocale(let locale):
                 return "Apple Speech does not support the locale \(locale)."
             case .assetsNotInstalled(let locale):
-                return "Apple Speech assets for \(locale) are not ready yet. macOS may continue preparing them in the background; EchoType rechecks before the next dictation. You can also retry from the Dictation panel."
+                return "Apple Speech assets for \(locale) are not ready yet. macOS may continue preparing them in the background; EchoFlow rechecks before the next dictation. You can also retry from the Dictation panel."
             case .emptyAudioFile:
                 return "The recording is empty. Try speaking for a little longer."
             }

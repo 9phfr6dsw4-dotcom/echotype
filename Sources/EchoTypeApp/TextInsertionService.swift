@@ -323,7 +323,7 @@ final class TextInsertionService {
                 debugInfo: diagnosticInfo(
                     captured: capturedTarget,
                     current: nil,
-                    insertionResult: "EchoType could not verify the target application before text input."
+                    insertionResult: "EchoFlow could not verify the target application before text input."
                 )
             )
         }
@@ -503,9 +503,9 @@ final class TextInsertionService {
         case .unsupportedField:
             "The focused control could not be verified as a text field, so text input was blocked."
         case .policyUnavailable:
-            "EchoType could not verify the excluded-app policy or app identity, so text input was blocked."
+            "EchoFlow could not verify the excluded-app policy or app identity, so text input was blocked."
         case .excludedApplication:
-            "The frontmost app is excluded by EchoType's app policy."
+            "The frontmost app is excluded by EchoFlow's app policy."
         }
     }
 

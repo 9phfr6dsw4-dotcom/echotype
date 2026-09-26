@@ -157,7 +157,7 @@ private struct RecordingOverlayView: View {
     }
 
     private var accessibilityLabel: String {
-        var components = ["EchoType \\(title)."]
+        var components = ["EchoFlow \\(title)."]
         if model.showLiveWords && !model.transcript.isEmpty {
             components.append(model.transcript)
         }
@@ -223,7 +223,7 @@ private struct RecordingOverlayView: View {
 
     private var title: String {
         switch model.phase {
-        case .idle: "EchoType"
+        case .idle: "EchoFlow"
         case .recording: "Listening"
         case .finishing: "Finishing transcription"
         case .done: "Dictation complete"

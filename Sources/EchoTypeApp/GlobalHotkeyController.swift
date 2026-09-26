@@ -55,7 +55,7 @@ final class GlobalHotkeyController {
             with: [selectedShortcut, backupShortcut, voiceMemoShortcut],
             reservedModifierFlags: selectedModifierFlags
         ) {
-            return "Rewrite hotkey matches or overlaps another EchoType hotkey. Change one of them to use Rewrite."
+            return "Rewrite hotkey matches or overlaps another EchoFlow hotkey. Change one of them to use Rewrite."
         }
         return nil
     }
@@ -371,11 +371,11 @@ final class GlobalHotkeyController {
             }
             if Thread.isMainThread {
                 MainActor.assumeIsolated {
-                    self?.handle(input, source: "EchoType")
+                    self?.handle(input, source: "EchoFlow")
                 }
             } else {
                 Task { @MainActor [weak self] in
-                    self?.handle(input, source: "EchoType")
+                    self?.handle(input, source: "EchoFlow")
                 }
             }
             return event

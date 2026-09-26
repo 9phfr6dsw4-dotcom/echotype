@@ -253,7 +253,7 @@ public final class TranscriptHistoryStore {
     private func markdownArchive(for records: [TranscriptRecord]) throws -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var lines = ["# EchoType Transcript Archive", ""]
+        var lines = ["# EchoFlow Transcript Archive", ""]
         for record in Self.sorted(records) {
             lines.append("## \(formatter.string(from: record.timestamp))")
             lines.append("")

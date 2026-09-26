@@ -1,6 +1,6 @@
-name: Publish EchoType release
+name: Publish EchoFlow release
 
-# Publishes the exact EchoType.zip that EchoType CI built, tested, packaged,
+# Publishes the exact EchoFlow.zip that EchoFlow CI built, tested, packaged,
 # and smoke-tested for the tagged commit. Nothing is rebuilt here.
 on:
   push:
@@ -35,7 +35,7 @@ jobs:
           run_number="$(jq -r '.[0].number // empty' <<<"$runs")"
           head_sha="$(jq -r '.[0].headSha // empty' <<<"$runs")"
           if [[ -z "$run_id" || "$head_sha" != "$TAG_SHA" ]]; then
-            printf 'No successful EchoType CI run exists for %s (%s).\n' "$TAG" "$TAG_SHA" >&2
+            printf 'No successful EchoFlow CI run exists for %s (%s).\n' "$TAG" "$TAG_SHA" >&2
             exit 1
           fi
           printf 'Using CI run %s\n' "$(jq -r '.[0].url' <<<"$runs")"
@@ -47,19 +47,19 @@ jobs:
           RUN_NUMBER: ${{ steps.ci.outputs.run_number }}
         run: |
           set -euo pipefail
-          gh run download "$RUN_ID" --name "EchoType-$RUN_NUMBER" --dir "$RUNNER_TEMP/release-assets"
+          gh run download "$RUN_ID" --name "EchoFlow-$RUN_NUMBER" --dir "$RUNNER_TEMP/release-assets"
           ls -l "$RUNNER_TEMP/release-assets"
 
       - name: Verify checksum, bundle identity, and signature
         working-directory: ${{ runner.temp }}/release-assets
         run: |
           set -euo pipefail
-          test -s EchoType.zip
-          test -s EchoType.zip.sha256
-          shasum -a 256 -c EchoType.zip.sha256
-          ditto -x -k EchoType.zip extracted
-          app="extracted/EchoType.app"
-          test -x "$app/Contents/MacOS/EchoType"
+          test -s EchoFlow.zip
+          test -s EchoFlow.zip.sha256
+          shasum -a 256 -c EchoFlow.zip.sha256
+          ditto -x -k EchoFlow.zip extracted
+          app="extracted/EchoFlow.app"
+          test -x "$app/Contents/MacOS/EchoFlow"
           plutil -lint "$app/Contents/Info.plist"
           short_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
           build_number="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")"
@@ -87,9 +87,9 @@ jobs:
         working-directory: ${{ runner.temp }}/release-assets
         run: |
           set -euo pipefail
-          gh release create "$TAG" EchoType.zip EchoType.zip.sha256 \
+          gh release create "$TAG" EchoFlow.zip EchoFlow.zip.sha256 \
             --verify-tag \
-            --title "EchoType $TAG" \
+            --title "EchoFlow $TAG" \
             --notes-file "$RUNNER_TEMP/release-notes.md"
 
       - name: Read back published assets
@@ -97,7 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           published="$(gh api "repos/$GH_REPO/releases/tags/$TAG")"
-          for asset in EchoType.zip EchoType.zip.sha256; do
+          for asset in EchoFlow.zip EchoFlow.zip.sha256; do
             expected="sha256:$(shasum -a 256 "$asset" | awk '{print $1}')"
             actual="$(jq -r --arg name "$asset" '.assets[] | select(.name == $name) | .digest' <<<"$published")"
             printf '%s expected %s published %s\n' "$asset" "$expected" "$actual"

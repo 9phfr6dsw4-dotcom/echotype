@@ -27,7 +27,7 @@ struct LocalModelTranscriber {
             case .unavailableBackend(let engineID):
                 return "The selected transcription engine is not installed or supported: \(engineID)."
             case .missingLocalAsset(let path):
-                return "A required local model file is missing: \(path). Reinstall the model from EchoType."
+                return "A required local model file is missing: \(path). Reinstall the model from EchoFlow."
             case .unsupportedParakeetLanguage(let language):
                 return "Parakeet v3 does not support the selected language (\(language)). Choose one of its 25 listed languages or use Whisper/Apple Speech."
             case .emptyTranscript:

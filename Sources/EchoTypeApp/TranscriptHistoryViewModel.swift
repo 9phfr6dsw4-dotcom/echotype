@@ -191,7 +191,7 @@ private enum TranscriptHistoryEditError: LocalizedError {
         case .emptyTranscript:
             "A saved transcript cannot be replaced with empty text."
         case .recordNotFound:
-            "This transcript is no longer in EchoType history."
+            "This transcript is no longer in EchoFlow history."
         }
     }
 }

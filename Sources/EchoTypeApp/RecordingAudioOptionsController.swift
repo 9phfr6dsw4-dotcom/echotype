@@ -94,7 +94,7 @@ final class RecordingAudioOptionsController {
         for player in MediaPlayer.allCases where pausedByController.contains(player) {
             switch resumeIfStillPaused(player) {
             case .resumed:
-                messages.append("Resumed \(player.displayName), which EchoType paused.")
+                messages.append("Resumed \(player.displayName), which EchoFlow paused.")
             case .notRunning:
                 messages.append("Did not resume \(player.displayName); it is no longer running.")
             case .notPaused:

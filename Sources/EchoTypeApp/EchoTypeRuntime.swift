@@ -747,7 +747,7 @@ final class EchoTypeRuntime {
         case .excludedApplication:
             "Voice Rewrite is unavailable while an excluded app is frontmost."
         case .policyUnavailable:
-            "Voice Rewrite is paused because EchoType could not verify the excluded-app settings. Reopen Settings and try again."
+            "Voice Rewrite is paused because EchoFlow could not verify the excluded-app settings. Reopen Settings and try again."
         case .invalidRange:
             "Voice Rewrite could not verify the selected text range; nothing was changed."
         case .selectionTooLarge:
@@ -760,7 +760,7 @@ final class EchoTypeRuntime {
         case .replacedByAccessibility:
             "The original selection was replaced with the on-device rewrite."
         case .insertedByKeyboardEvents:
-            "Unicode text input was sent to the verified original selection; EchoType cannot confirm whether the app accepted it."
+            "Unicode text input was sent to the verified original selection; EchoFlow cannot confirm whether the app accepted it."
         case .selectionChanged:
             "Rewrite canceled because the selected text, field, or app changed. The original selection was left alone."
         case .targetUnavailable:
@@ -775,11 +775,11 @@ final class EchoTypeRuntime {
         case .inserted:
             "Accessibility inserted text into the verified field."
         case .insertedViaKeyboardEvents:
-            "Unicode text input was sent to the same foreground app; EchoType cannot confirm whether the app accepted it."
+            "Unicode text input was sent to the same foreground app; EchoFlow cannot confirm whether the app accepted it."
         case .insertedAndSubmitted:
             "Text was inserted into the verified field and Return was sent."
         case .blocked(.targetUnavailable):
-            "Not inserted: EchoType could not verify the foreground app when dictation stopped and text was ready. Use Copy in the transcript only if needed."
+            "Not inserted: EchoFlow could not verify the foreground app when dictation stopped and text was ready. Use Copy in the transcript only if needed."
         case .blocked(.targetChanged):
             "Not inserted: the foreground app changed before the text was ready. Use Copy in the transcript only if needed."
         case .blocked(.excludedApplication):
@@ -787,11 +787,11 @@ final class EchoTypeRuntime {
         case .blocked(.secureField):
             "Not inserted: the focused control is marked as a secure field."
         case .blocked(.unsupportedField):
-            "Not inserted: EchoType could not verify that the focused control is a text field."
+            "Not inserted: EchoFlow could not verify that the focused control is a text field."
         case .blocked(.policyUnavailable):
-            "Not inserted: EchoType could not verify the app identity or excluded-app policy."
+            "Not inserted: EchoFlow could not verify the app identity or excluded-app policy."
         case .failed:
-            "Text could not be inserted. The transcript remains available in EchoType."
+            "Text could not be inserted. The transcript remains available in EchoFlow."
         }
     }
 }

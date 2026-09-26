@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PACKAGED_APP="$ROOT_DIR/dist/verify-extracted/EchoType.app"
+PACKAGED_APP="$ROOT_DIR/dist/verify-extracted/EchoFlow.app"
 BUILD_DIR="$ROOT_DIR/.build"
 BUILD_BACKUP="$ROOT_DIR/.build-smoke-test-backup.$$"
 SMOKE_PARENT="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
@@ -11,12 +11,12 @@ if [[ ! -d "$PACKAGED_APP" ]]; then
     printf 'Extracted packaged app does not exist: %s\n' "$PACKAGED_APP" >&2
     exit 1
 fi
-test -x "$PACKAGED_APP/Contents/MacOS/EchoType"
+test -x "$PACKAGED_APP/Contents/MacOS/EchoFlow"
 test -s "$PACKAGED_APP/Contents/Resources/EchoType_EchoTypeCore.bundle/model-manifest.json"
 
 mkdir -p "$SMOKE_PARENT"
 SMOKE_DIR="$(mktemp -d "$SMOKE_PARENT/echotype-smoke.XXXXXX")"
-SMOKE_APP="$SMOKE_DIR/EchoType.app"
+SMOKE_APP="$SMOKE_DIR/EchoFlow.app"
 
 echo 'Copying the extracted release app to a clean temporary location.'
 ditto "$PACKAGED_APP" "$SMOKE_APP"
@@ -24,7 +24,7 @@ ditto "$PACKAGED_APP" "$SMOKE_APP"
 cleanup() {
     status=$?
     trap - EXIT
-    pkill -x EchoType >/dev/null 2>&1 || true
+    pkill -x EchoFlow >/dev/null 2>&1 || true
     if [[ -d "$BUILD_BACKUP" ]]; then
         rm -rf "$BUILD_DIR"
         mv "$BUILD_BACKUP" "$BUILD_DIR"
@@ -50,15 +50,15 @@ printf 'Build directory is unavailable; launching extracted app from %s\n' "$SMO
 open -n -g "$SMOKE_APP"
 
 for _ in {1..10}; do
-    if pgrep -x EchoType >/dev/null 2>&1; then
+    if pgrep -x EchoFlow >/dev/null 2>&1; then
         sleep 3
-        if pgrep -x EchoType >/dev/null 2>&1; then
-            printf 'Clean-location launch smoke test passed; EchoType remained running.\n'
+        if pgrep -x EchoFlow >/dev/null 2>&1; then
+            printf 'Clean-location launch smoke test passed; EchoFlow remained running.\n'
             exit 0
         fi
     fi
     sleep 1
 done
 
-printf 'EchoType did not remain running after launch without its SwiftPM build directory.\n' >&2
+printf 'EchoFlow did not remain running after launch without its SwiftPM build directory.\n' >&2
 exit 1
