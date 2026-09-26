@@ -155,6 +155,9 @@ final class EchoTypeRuntime {
             return
         }
 
+        if dictation.isRecording, activeRecordingAction.kind == .dictation {
+            textInsertion.prepareFrontmostAppAccessibility()
+        }
         guard dictation.isRecording,
               textInsertion.isFrontmostAppExcluded(),
               recordingDiscardGate.request() else { return }
@@ -315,6 +318,9 @@ final class EchoTypeRuntime {
                 action: action
             )
             return
+        }
+        if action.kind == .dictation {
+            textInsertion.prepareFrontmostAppAccessibility()
         }
         dismissOverlayTask?.cancel()
         finalTranscriptOverride = nil

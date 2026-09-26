@@ -193,6 +193,26 @@ final class TextInsertionService {
         )
     }
 
+    /// Electron apps such as Claude, Slack, and VS Code keep their accessibility tree off until a
+    /// client sets AXManualAccessibility on the application, so their focused text field is not
+    /// exposed and insertion fails closed. Call this when recording starts so the tree is ready by
+    /// the time the transcript is delivered. Excluded apps are left untouched; other apps ignore it.
+    func prepareFrontmostAppAccessibility() {
+        guard AXIsProcessTrusted(),
+              let application = NSWorkspace.shared.frontmostApplication,
+              !isExcludedOrUnverifiable(application.bundleIdentifier) else { return }
+        Self.enableManualAccessibility(for: application.processIdentifier)
+    }
+
+    private static func enableManualAccessibility(for processIdentifier: pid_t) {
+        let applicationElement = AXUIElementCreateApplication(processIdentifier)
+        _ = AXUIElementSetAttributeValue(
+            applicationElement,
+            "AXManualAccessibility" as CFString,
+            kCFBooleanTrue
+        )
+    }
+
     func isFrontmostAppExcluded() -> Bool {
         isExcludedOrUnverifiable(NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
     }
@@ -763,8 +783,21 @@ final class TextInsertionService {
 
         let system = AXUIElementCreateSystemWide()
         var focusedValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focusedValue) == .success,
-              let focusedValue else { return nil }
+        if AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focusedValue) != .success
+            || focusedValue == nil {
+            // Electron apps expose nothing system-wide until their accessibility tree is enabled;
+            // enable it (never for excluded apps) and ask the frontmost application directly.
+            guard !isExcludedOrUnverifiable(application.bundleIdentifier) else { return nil }
+            Self.enableManualAccessibility(for: application.processIdentifier)
+            focusedValue = nil
+            let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
+            guard AXUIElementCopyAttributeValue(
+                applicationElement,
+                kAXFocusedUIElementAttribute as CFString,
+                &focusedValue
+            ) == .success else { return nil }
+        }
+        guard let focusedValue, CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else { return nil }
         let focusedElement = focusedValue as! AXUIElement
         if requireFrontmostProcessMatch {
             var focusedProcessIdentifier: pid_t = 0
