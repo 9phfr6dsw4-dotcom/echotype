@@ -59,6 +59,18 @@ jobs:
           ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$APP/Contents/Info.plist")"
           [[ "$ICON_NAME" == *.icns ]] || ICON_NAME="$ICON_NAME.icns"
           sips -s format png "$APP/Contents/Resources/$ICON_NAME" --out "$RUNNER_TEMP/readme-images/echotype-icon.png" >/dev/null
+          osascript <<'APPLESCRIPT'
+          tell application "System Events"
+            tell process "EchoType"
+              set frontmost to true
+              repeat 4 times
+                key code 121
+                delay 0.4
+              end repeat
+            end tell
+          end tell
+          APPLESCRIPT
+          sleep 2
           WINDOW_ID="$(swift "$RUNNER_TEMP/capture.swift" EchoType)"
           screencapture -x -l "$WINDOW_ID" "$RUNNER_TEMP/readme-images/echotype-window.png"
       - uses: actions/upload-artifact@v4
