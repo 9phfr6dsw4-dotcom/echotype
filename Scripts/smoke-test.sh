@@ -24,7 +24,6 @@ ditto "$PACKAGED_APP" "$SMOKE_APP"
 cleanup() {
     status=$?
     trap - EXIT
-    pkill -x EchoFlow >/dev/null 2>&1 || true
     if [[ -d "$BUILD_BACKUP" ]]; then
         rm -rf "$BUILD_DIR"
         mv "$BUILD_BACKUP" "$BUILD_DIR"
