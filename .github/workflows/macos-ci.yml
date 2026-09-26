@@ -25,10 +25,10 @@ jobs:
           sdk_major="${sdk_version%%.*}"
           test "$sdk_major" -ge 26
       - name: Create generated speech sample
-        run: say -o "$RUNNER_TEMP/echotype-sample.aiff" "Echo Type stores my speech on this Mac."
+        run: say -o "$RUNNER_TEMP/echoflow-sample.aiff" "Echo Flow stores my speech on this Mac."
       - name: Run tests
         env:
-          ECHOTYPE_TEST_AUDIO: ${{ runner.temp }}/echotype-sample.aiff
+          ECHOFLOW_TEST_AUDIO: ${{ runner.temp }}/echoflow-sample.aiff
         run: swift test
       - name: Build, package, and verify native app
         run: bash Scripts/package-app.sh
@@ -65,6 +65,6 @@ jobs:
             "$RUNNER_TEMP/whisper-sample.aiff" "$RUNNER_TEMP/whisper-sample.wav"
       - name: Run opt-in uncached versus cache-hit real inference
         env:
-          ECHOTYPE_WHISPER_MODEL_DIRECTORY: ${{ runner.temp }}/whisper-tiny-${{ github.run_id }}-${{ github.run_attempt }}
-          ECHOTYPE_WHISPER_BENCH_AUDIO: ${{ runner.temp }}/whisper-sample.wav
+          ECHOFLOW_WHISPER_MODEL_DIRECTORY: ${{ runner.temp }}/whisper-tiny-${{ github.run_id }}-${{ github.run_attempt }}
+          ECHOFLOW_WHISPER_BENCH_AUDIO: ${{ runner.temp }}/whisper-sample.wav
         run: swift test --filter WhisperPerformanceTests

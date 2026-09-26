@@ -1,4 +1,4 @@
-# EchoType: product, model, and delivery research
+# EchoFlow: product, model, and delivery research
 
 **Reviewed:** September 25, 2026
 **Target:** native macOS 26 dictation app for the user’s M5 MacBook Air.
@@ -14,9 +14,9 @@ Separate MacWhisper user posts request additional shortcuts and glossary/context
 
 These are reports and feature requests, not measured failure rates.[2][3][28]
 
-The Accessibility button requests the system prompt and then opens System Settings → Privacy & Security → Accessibility. Apple documents that `AXIsProcessTrustedWithOptions` prompts asynchronously and that the immediate return value only reflects current trust; EchoType refreshes trust when it becomes active after the user enables the entry.[66] A bare modifier tap is recognized only on release and is cancelled if another key is pressed, preventing ordinary combinations such as Control-C from toggling dictation. EchoType enables the hotkey by default when Accessibility is available, persists the user's on/off choice, and reports whether its system-wide monitor is installed, how many keyboard events it has received, and whether it recognized the configured hotkey. Input Monitoring is not needed for the AppKit monitor. Before insertion, EchoType reads only the focused element's role/subrole for delivery diagnostics; it never reads that element's text value.[63][64] Release artifacts currently use ad-hoc signatures; Apple documents that an ad-hoc signature's designated requirement is tied to that exact build, so macOS may treat future builds as distinct privacy clients until EchoType uses a stable Developer ID signature.[65] Apple DTS also confirmed a macOS 26.1 Privacy & Security bug that hid some Accessibility items while permission remained effective; it was fixed in macOS 26.3 beta. The affected macOS version on the user's Mac is unknown, so this may or may not explain the missing listing.[67]
+The Accessibility button requests the system prompt and then opens System Settings → Privacy & Security → Accessibility. Apple documents that `AXIsProcessTrustedWithOptions` prompts asynchronously and that the immediate return value only reflects current trust; EchoFlow refreshes trust when it becomes active after the user enables the entry.[66] A bare modifier tap is recognized only on release and is cancelled if another key is pressed, preventing ordinary combinations such as Control-C from toggling dictation. EchoFlow enables the hotkey by default when Accessibility is available, persists the user's on/off choice, and reports whether its system-wide monitor is installed, how many keyboard events it has received, and whether it recognized the configured hotkey. Input Monitoring is not needed for the AppKit monitor. Before insertion, EchoFlow reads only the focused element's role/subrole for delivery diagnostics; it never reads that element's text value.[63][64] Release artifacts currently use ad-hoc signatures; Apple documents that an ad-hoc signature's designated requirement is tied to that exact build, so macOS may treat future builds as distinct privacy clients until EchoFlow uses a stable Developer ID signature.[65] Apple DTS also confirmed a macOS 26.1 Privacy & Security bug that hid some Accessibility items while permission remained effective; it was fixed in macOS 26.3 beta. The affected macOS version on the user's Mac is unknown, so this may or may not explain the missing listing.[67]
 
-No controlled same-audio comparison among Apple Speech, Parakeet v3, and Whisper large-v3-turbo on an M5 MacBook Air was found in the sources reviewed.[13][22][23] EchoType will avoid promising a universal winner and record local processing times so the user can compare the same clip.
+No controlled same-audio comparison among Apple Speech, Parakeet v3, and Whisper large-v3-turbo on an M5 MacBook Air was found in the sources reviewed.[13][22][23] EchoFlow will avoid promising a universal winner and record local processing times so the user can compare the same clip.
 
 ## Three-engine comparison
 
@@ -24,7 +24,7 @@ No controlled same-audio comparison among Apple Speech, Parakeet v3, and Whisper
 
 Apple provides SpeechAnalyzer and DictationTranscriber APIs for speech analysis and dictation.[6][8]
 
-Apple's `AssetInventory.status` checks whether a locale's system-managed assets are already installed without triggering a download; after launch and before dictation, EchoType reuses installed assets or displays the explicit Prepare control for missing Apple Speech assets.[7] Parakeet and Whisper remain explicit-download only.
+Apple's `AssetInventory.status` checks whether a locale's system-managed assets are already installed without triggering a download; after launch and before dictation, EchoFlow reuses installed assets or displays the explicit Prepare control for missing Apple Speech assets.[7] Parakeet and Whisper remain explicit-download only.
 
 Apple exposes contextual strings for vocabulary hints.[9]
 
@@ -37,7 +37,7 @@ FluidAudio v0.17.2 can load this selected bundle directly from a local folder.[5
 
 At pinned revision `7dd20fe6b1797d35f5e3307e8b1732d9a178edfe`, the selected int8-v2 bundle is **632,169,729 bytes** across 20 files.[15][46][50]
 
-FluidInference also publishes a legacy `Encoder.mlmodelc` path; EchoType selects the version-2 encoder and does not include the legacy files.[16][46]
+FluidInference also publishes a legacy `Encoder.mlmodelc` path; EchoFlow selects the version-2 encoder and does not include the legacy files.[16][46]
 
 The encoder, decoder, joint-decision, and preprocessor weight entries have pinned file metadata.[47][48][49]
 
@@ -45,7 +45,7 @@ FluidAudio supports streaming transcription and vocabulary rescoring.[54]
 
 The CTC vocabulary-rescoring files are **2,374,186,501 bytes** across 10 files, and the upstream NVIDIA CTC model is CC-BY-4.0.[30][51][52]
 
-Its conversion repository does not declare a license field, so EchoType attributes both source and converter.[31][32][55]
+Its conversion repository does not declare a license field, so EchoFlow attributes both source and converter.[31][32][55]
 
 ### Whisper large-v3-turbo
 
@@ -59,7 +59,7 @@ Six tokenizer assets from OpenAI revision `41f01f3fe87f28c78e2fbf8b568835947dd65
 
 WhisperKit v1.1.0 supports `promptTokens` for decoder context and live streaming from a selectable input device.[57][58]
 
-It searches supplied local folders for `tokenizer.json` before falling back to the Hub; EchoType bundles the pinned tokenizer and sets `download: false`.[56][58]
+It searches supplied local folders for `tokenizer.json` before falling back to the Hub; EchoFlow bundles the pinned tokenizer and sets `download: false`.[56][58]
 
 The current FluidAudio main-branch loader and streaming/vocabulary implementation were cross-checked against the pinned release APIs.[40][41][42]
 
@@ -71,7 +71,7 @@ The Parakeet/CTC and OpenAI/Argmax model repositories are public and report no a
 
 The OpenAI tokenizer repository is also ungated.[34]
 
-Large Hugging Face LFS files expose publisher SHA-256 object IDs; EchoType will bundle hashes for the small regular Git files from their pinned commits as well.[26][35][46]
+Large Hugging Face LFS files expose publisher SHA-256 object IDs; EchoFlow will bundle hashes for the small regular Git files from their pinned commits as well.[26][35][46]
 
 Downloads begin only after the user presses **Download**, the UI shows the exact byte total first, and any size/hash mismatch blocks installation.
 
@@ -93,12 +93,12 @@ The UI will distinguish these mechanisms from post-transcription spelling correc
 |---|---|
 | Engine selection | Exactly three choices. Apple is the working first-run fallback; after Parakeet has downloaded and loaded successfully, make it the default. Switching happens between recordings. |
 | Live preview | Apple Speech streams partial and final text. Parakeet and Whisper currently produce their transcript after recording stops; real-time local-engine preview remains unimplemented. The overlay can hide live words while retaining the recording indicator, and never labels one engine’s output as another. |
-| Hotkeys | Left Control bare tap-to-toggle by default, enabled on first launch when Accessibility is available, and persisted across launches. If permission is missing, the status line explains it and the button requests permission and opens Accessibility settings. Returning to EchoType refreshes permission and starts the existing listener when enabled. The diagnostic status reports monitor registration, received keyboard-event count, last event type/key code (never typed characters), and recognized actions. No Input Monitoring permission is required for the AppKit monitor. Right Option, Fn/Globe, hold-to-talk, custom modifier-plus-key capture, and one optional backup chord are also available. Ignore ordinary modifier chords, never consume hotkey events, and keep the monitor in app-level runtime so closing the window does not stop it. |
+| Hotkeys | Left Control bare tap-to-toggle by default, enabled on first launch when Accessibility is available, and persisted across launches. If permission is missing, the status line explains it and the button requests permission and opens Accessibility settings. Returning to EchoFlow refreshes permission and starts the existing listener when enabled. The diagnostic status reports monitor registration, received keyboard-event count, last event type/key code (never typed characters), and recognized actions. No Input Monitoring permission is required for the AppKit monitor. Right Option, Fn/Globe, hold-to-talk, custom modifier-plus-key capture, and one optional backup chord are also available. Ignore ordinary modifier chords, never consume hotkey events, and keep the monitor in app-level runtime so closing the window does not stop it. |
 | Overlay and focus | A non-activating overlay uses the screen’s auxiliary top areas to center around the camera housing, joins full-screen Spaces, and is hidden when idle. Interactive placement still needs testing on the M5 Mac. Delivery failures appear briefly in the overlay with app, focused-element type, and skip reason; a same-app paste fallback is used when Accessibility cannot expose the exact field, but delivery stops if the frontmost app changes. Clipboard data is saved/restored unless the user asks to keep the transcript there. |
 | Text delivery | At dictation stop, capture the frontmost app and focused-element type for diagnostics. Before sending Command-V, verify the foreground app is still the same app; when Accessibility cannot expose its exact text field, still send the paste command to that same app. Delivery still refuses known secure fields, excluded password-manager apps, and app changes; do not read the focused element's text value. Optional Return is enabled only for a verified Accessibility text field. |
 | App presence | Keep a normal Dock icon and a reopenable settings/history window. |
 | Storage | Audio stays in memory by default; optional audio saving is off initially. Local transcript history defaults to 30 days, with 7 days, 90 days, and forever choices. Retention never deletes learned terms. |
-| Learning | Transcript-history edits remain explicit and require at least three matching corrections; short common words are ignored, and the optional confirmation setting remains off by default. A separate opt-in setting, off by default, can learn corrections made to a recent EchoType paste: observe only the captured text field for at most 10 seconds, require selected/value AX notifications and valid UTF-16 range/count/caret metadata, debounce value changes for 800 ms, and use `InsertedTextCorrectionScope` to admit only the exact inserted or replacement range. The only content read is the parameterized AX string for the validated replacement range; original text comes from EchoType’s own inserted transcript. Never read whole-field values, window titles, URLs, secure fields, or excluded apps. Missing or ambiguous AX data/notifications/target validation fails closed; apps whose notification ordering cannot safely establish a selection-before-change may not produce learning. Send only extractor-approved one-token pairs through the existing local-learning callback, preserving its three-repeat rule. |
+| Learning | Transcript-history edits remain explicit and require at least three matching corrections; short common words are ignored, and the optional confirmation setting remains off by default. A separate opt-in setting, off by default, can learn corrections made to a recent EchoFlow paste: observe only the captured text field for at most 10 seconds, require selected/value AX notifications and valid UTF-16 range/count/caret metadata, debounce value changes for 800 ms, and use `InsertedTextCorrectionScope` to admit only the exact inserted or replacement range. The only content read is the parameterized AX string for the validated replacement range; original text comes from EchoFlow’s own inserted transcript. Never read whole-field values, window titles, URLs, secure fields, or excluded apps. Missing or ambiguous AX data/notifications/target validation fails closed; apps whose notification ordering cannot safely establish a selection-before-change may not produce learning. Send only extractor-approved one-token pairs through the existing local-learning callback, preserving its three-repeat rule. |
 | Vocabulary | Apple contextual strings, Whisper prompt tokens, and Parakeet CTC rescoring. Parakeet's CTC files are part of its one explicit model installation and are deleted with it. Existing verified files are reused and only missing files are downloaded. Adding or editing custom terms never starts a download. |
 | Recording options | Optional controls can pause Music/Spotify and lower writable system output volume, with saved volume restored at recording end. Browser media is not controlled. The instant-on microphone toggle remains visible but disabled and unavailable; no microphone is kept open between dictations. |
 | Comparison | Keep a recent clip in memory briefly for same-clip comparison; persist only if audio saving is enabled. Record local per-engine processing duration. |

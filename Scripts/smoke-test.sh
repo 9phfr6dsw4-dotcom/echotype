@@ -12,10 +12,10 @@ if [[ ! -d "$PACKAGED_APP" ]]; then
     exit 1
 fi
 test -x "$PACKAGED_APP/Contents/MacOS/EchoFlow"
-test -s "$PACKAGED_APP/Contents/Resources/EchoType_EchoTypeCore.bundle/model-manifest.json"
+test -s "$PACKAGED_APP/Contents/Resources/EchoFlow_EchoFlowCore.bundle/model-manifest.json"
 
 mkdir -p "$SMOKE_PARENT"
-SMOKE_DIR="$(mktemp -d "$SMOKE_PARENT/echotype-smoke.XXXXXX")"
+SMOKE_DIR="$(mktemp -d "$SMOKE_PARENT/echoflow-smoke.XXXXXX")"
 SMOKE_APP="$SMOKE_DIR/EchoFlow.app"
 
 echo 'Copying the extracted release app to a clean temporary location.'

@@ -1,7 +1,5 @@
 # EchoFlow
 
-_Formerly EchoType. Your settings, history, and downloaded models carry over; after installing EchoFlow.app, delete the old EchoType.app._
-
 EchoFlow is a native SwiftUI/AppKit dictation app for **macOS 26 and later**. Speech recognition, transcript history, correction learning, vocabulary, and preferences stay on your Mac. The app does not use cloud transcription, accounts, analytics, crash reporting, or background update checks.
 
 ## Download

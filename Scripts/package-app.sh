@@ -13,8 +13,8 @@ ICONSET_DIR="dist/AppIcon.iconset"
 rm -rf "$APP_BUNDLE" "$ZIP_PATH" "$ZIP_PATH.sha256" "$VERIFY_DIR" "$ICONSET_DIR"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources" "dist"
 
-swift build --configuration release --product EchoTypeApp
-install -m 755 ".build/release/EchoTypeApp" "$APP_BUNDLE/Contents/MacOS/EchoFlow"
+swift build --configuration release --product EchoFlowApp
+install -m 755 ".build/release/EchoFlowApp" "$APP_BUNDLE/Contents/MacOS/EchoFlow"
 cp "Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 test -x "$APP_BUNDLE/Contents/MacOS/EchoFlow"
 /usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx 'EchoFlow'
@@ -22,7 +22,7 @@ test -x "$APP_BUNDLE/Contents/MacOS/EchoFlow"
 /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP_BUNDLE/Contents/Info.plist" | grep -Fx 'EchoFlow'
 
 resource_bundles=()
-EXPECTED_CORE_BUNDLE=".build/release/EchoType_EchoTypeCore.bundle"
+EXPECTED_CORE_BUNDLE=".build/release/EchoFlow_EchoFlowCore.bundle"
 if [[ ! -s "$EXPECTED_CORE_BUNDLE/model-manifest.json" ]]; then
     printf 'Required model catalog bundle is missing: %s\n' "$EXPECTED_CORE_BUNDLE" >&2
     find -L .build/release -maxdepth 2 -print >&2
@@ -39,7 +39,7 @@ fi
 for bundle_path in "${resource_bundles[@]}"; do
     cp -R "$bundle_path" "$APP_BUNDLE/Contents/Resources/"
 done
-test -s "$APP_BUNDLE/Contents/Resources/EchoType_EchoTypeCore.bundle/model-manifest.json"
+test -s "$APP_BUNDLE/Contents/Resources/EchoFlow_EchoFlowCore.bundle/model-manifest.json"
 
 swift Scripts/create-app-icon.swift "$ICONSET_DIR"
 iconutil -c icns "$ICONSET_DIR" -o "$APP_BUNDLE/Contents/Resources/AppIcon.icns"

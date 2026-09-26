@@ -66,7 +66,7 @@ def expected_digest(item):
 def tree(repo, revision, prefix=""):
     path = f"/{quote(prefix, safe='/')}" if prefix else ""
     url = f"https://huggingface.co/api/models/{repo}/tree/{revision}{path}?recursive=true&expand=true"
-    with urlopen(Request(url, headers={"User-Agent": "EchoType-CI-Whisper-benchmark"}), timeout=45) as response:
+    with urlopen(Request(url, headers={"User-Agent": "EchoFlow-CI-Whisper-benchmark"}), timeout=45) as response:
         # The small pinned trees must arrive complete; never silently benchmark a partial list.
         if response.headers.get("Link"):
             raise IntegrityError("Paginated repository tree is not supported")
@@ -125,7 +125,7 @@ def download(repo, revision, source, destination, item):
     url = f"https://huggingface.co/{repo}/resolve/{revision}/{quote(source, safe='/')}"
     # Exclusive creation: never overwrite an existing file, and do not follow a symlink.
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    with urlopen(Request(url, headers={"User-Agent": "EchoType-CI-Whisper-benchmark"}), timeout=90) as response:
+    with urlopen(Request(url, headers={"User-Agent": "EchoFlow-CI-Whisper-benchmark"}), timeout=90) as response:
         with os.fdopen(os.open(destination, flags, 0o600), "wb") as target:
             count = 0
             while True:
