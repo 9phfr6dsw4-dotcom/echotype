@@ -8,19 +8,6 @@
 
 <p align="center"><a href="https://github.com/9phfr6dsw4-dotcom/echoflow/releases/latest"><strong>Download the latest release</strong></a> · macOS 26+</p>
 
-## Screenshots
-
-<table>
-  <tr>
-    <td align="center"><strong>Speech models</strong><br><img src="docs/images/screenshots/speech-models.png" alt="EchoFlow speech model choices" width="100%"></td>
-    <td align="center"><strong>Installed model details</strong><br><img src="docs/images/screenshots/model-library.png" alt="EchoFlow local model library" width="100%"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Local learning and vocabulary</strong><br><img src="docs/images/screenshots/settings-learning.png" alt="EchoFlow learning, vocabulary, and smart-link settings" width="100%"></td>
-    <td align="center"><strong>Recording and cleanup controls</strong><br><img src="docs/images/screenshots/settings-controls.png" alt="EchoFlow recording behavior and text cleanup settings" width="100%"></td>
-  </tr>
-</table>
-
 ## Features
 
 - Dictate with Apple Speech, Parakeet v3, or Whisper large-v3-turbo. Models are installed only when you choose them.
