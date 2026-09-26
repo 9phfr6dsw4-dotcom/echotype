@@ -170,7 +170,7 @@ struct ModelLibraryView: View {
                     if downloading {
                         Button("Downloading…") {}
                             .disabled(true)
-                    } else if !installationComplete, let download {
+                    } else if !installationComplete, download != nil {
                         Button {
                             Task { await library.download(engineID: engine.id) }
                         } label: {

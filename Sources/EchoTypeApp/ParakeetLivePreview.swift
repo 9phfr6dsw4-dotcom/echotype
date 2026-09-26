@@ -103,7 +103,7 @@ enum ParakeetLivePreview {
                                     acknowledge.finish()
                                 } catch { /* The window was acknowledged. */ }
                             }
-                            let acknowledged = await ackIterator.next()
+                            let acknowledged: Void? = await ackIterator.next()
                             watchdog.cancel()
                             try Task.checkCancellation()
                             guard acknowledged != nil else { throw CancellationError() }
