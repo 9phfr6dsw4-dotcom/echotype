@@ -14,7 +14,7 @@ final class OnDeviceTranscriptCleanupService {
         case .available:
             "Apple Intelligence is available. Text cleanup runs on this Mac only."
         case .unavailable(let reason):
-            "Apple Intelligence is unavailable on this Mac right now (\(reason)). EchoType will paste the raw recognized text."
+            "Apple Intelligence is unavailable on this Mac right now (\(reason)). EchoType will insert the raw recognized text."
         }
     }
 

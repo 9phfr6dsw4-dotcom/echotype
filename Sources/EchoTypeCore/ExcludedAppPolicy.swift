@@ -48,8 +48,13 @@ public struct ExcludedAppPolicy: Codable, Equatable, Sendable {
         _ = try container.decodeIfPresent([ExcludedApplication].self, forKey: .defaultExcludedApplications)
         self.defaultExcludedApplications = Self.builtInDefaultExclusions
         self.userExcludedApplications = Self.uniqueApplications(
-            try container.decodeIfPresent([ExcludedApplication].self, forKey: .userExcludedApplications) ?? []
+            try container.decode([ExcludedApplication].self, forKey: .userExcludedApplications)
         )
+    }
+
+    public static func resolvePersisted(_ data: Data?) -> ExcludedAppPolicy? {
+        guard let data else { return ExcludedAppPolicy() }
+        return try? JSONDecoder().decode(ExcludedAppPolicy.self, from: data)
     }
 
     public func isExcluded(bundleIdentifier: String?) -> Bool {

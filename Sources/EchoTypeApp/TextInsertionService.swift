@@ -16,6 +16,25 @@ final class CapturedInsertionTarget {
 }
 
 @MainActor
+final class CapturedRewriteSelection {
+    let snapshot: RewriteSelectionSnapshot
+    let focusedElement: AXUIElement
+
+    init(snapshot: RewriteSelectionSnapshot, focusedElement: AXUIElement) {
+        self.snapshot = snapshot
+        self.focusedElement = focusedElement
+    }
+}
+
+enum RewriteSelectionReplacementOutcome {
+    case replacedByAccessibility
+    case insertedByKeyboardEvents
+    case selectionChanged
+    case targetUnavailable
+    case failed
+}
+
+@MainActor
 final class CapturedDeliveryTarget {
     let snapshot: TextInsertionSnapshot
     let accessibilityTarget: CapturedInsertionTarget?
@@ -36,39 +55,26 @@ final class CapturedDeliveryTarget {
 final class TextInsertionService {
     enum Outcome {
         case inserted
-        case insertedViaSameApplicationFallback
+        case insertedViaKeyboardEvents
         case insertedAndSubmitted
-        case copyOnly(TextInsertionBlockReason)
+        case blocked(TextInsertionBlockReason)
         case failed
     }
 
     struct DeliveryReport {
         let outcome: Outcome
         let debugInfo: String
-        let clipboardRestorationWarning: String?
 
-        init(outcome: Outcome, debugInfo: String, clipboardRestorationWarning: String? = nil) {
-            self.outcome = outcome
-            self.debugInfo = debugInfo
-            self.clipboardRestorationWarning = clipboardRestorationWarning
-        }
-
-        var pasteEventDispatched: Bool {
+        var textWasInserted: Bool {
             switch outcome {
-            case .inserted, .insertedViaSameApplicationFallback, .insertedAndSubmitted:
+            case .inserted, .insertedViaKeyboardEvents, .insertedAndSubmitted:
                 true
-            case .copyOnly, .failed:
+            case .blocked, .failed:
                 false
             }
         }
 
-        var needsDeliveryNotice: Bool {
-            !pasteEventDispatched || clipboardRestorationWarning != nil
-        }
-    }
-
-    private struct ClipboardItemSnapshot {
-        let representations: [(NSPasteboard.PasteboardType, Data)]
+        var needsDeliveryNotice: Bool { !textWasInserted }
     }
 
     private struct CorrectionInsertionContext {
@@ -110,6 +116,53 @@ final class TextInsertionService {
         captureFocusedTarget()
     }
 
+    func captureRewriteSelection() -> Result<CapturedRewriteSelection, RewriteSelectionDecision> {
+        guard let excludedBundleIdentifiers = additionalExcludedBundleIdentifiers else {
+            return .failure(.policyUnavailable)
+        }
+        guard let target = captureFocusedTarget(requireFrontmostProcessMatch: true) else {
+            return .failure(.unsupportedField)
+        }
+        if let decision = RewriteSelectionPolicy.targetDecision(
+            for: target.snapshot,
+            additionalExcludedBundleIdentifiers: excludedBundleIdentifiers
+        ) {
+            return .failure(decision)
+        }
+        guard let selectionSnapshot = rewriteSelectionSnapshot(for: target) else {
+            return .failure(.noSelection)
+        }
+        let decision = RewriteSelectionPolicy.captureDecision(
+            for: selectionSnapshot,
+            additionalExcludedBundleIdentifiers: additionalExcludedBundleIdentifiers
+        )
+        guard decision == .allowed else { return .failure(decision) }
+        return .success(CapturedRewriteSelection(snapshot: selectionSnapshot, focusedElement: target.focusedElement))
+    }
+
+    func replaceSelectedText(
+        with text: String,
+        captured: CapturedRewriteSelection
+    ) async -> RewriteSelectionReplacementOutcome {
+        guard let rewrittenText = VoiceRewritePolicy.validOutput(text) else { return .failed }
+        guard rewriteSelectionStillMatches(captured) else { return .selectionChanged }
+
+        if AXUIElementSetAttributeValue(
+            captured.focusedElement,
+            kAXSelectedTextAttribute as CFString,
+            rewrittenText as CFString
+        ) == .success {
+            return .replacedByAccessibility
+        }
+
+        guard rewriteSelectionStillMatches(captured) else { return .selectionChanged }
+        guard postUnicodeText(
+            rewrittenText,
+            to: captured.snapshot.target.processIdentifier
+        ) else { return .failed }
+        return .insertedByKeyboardEvents
+    }
+
     func captureDeliveryTarget() -> CapturedDeliveryTarget? {
         guard let application = NSWorkspace.shared.frontmostApplication else { return nil }
         let accessibilityTarget = captureFocusedTarget().flatMap { target in
@@ -141,7 +194,11 @@ final class TextInsertionService {
     }
 
     func isFrontmostAppExcluded() -> Bool {
-        currentPolicy.isExcluded(bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+        isExcludedOrUnverifiable(NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
+    }
+
+    func isFrontmostAppExcludedForVoiceAction() -> Bool {
+        isFrontmostAppExcluded()
     }
 
     func setCorrectionLearningEnabled(_ enabled: Bool) {
@@ -160,7 +217,6 @@ final class TextInsertionService {
     func deliver(
         _ text: String,
         capturedTarget: CapturedDeliveryTarget?,
-        copyToClipboard: Bool,
         autoSend: Bool
     ) async -> DeliveryReport {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -170,7 +226,7 @@ final class TextInsertionService {
                 debugInfo: diagnosticInfo(
                     captured: capturedTarget,
                     current: nil,
-                    skipReason: "Transcript was empty; there was no text to paste."
+                    insertionResult: "Transcript was empty; there was no text to insert."
                 )
             )
         }
@@ -178,99 +234,115 @@ final class TextInsertionService {
         stopCorrectionObservation()
         let current = captureDeliveryTarget()
         let sameFocusedElement = Self.isSameFocusedElement(capturedTarget, current)
-        let decision = currentPolicy.decision(
+        let decision = decisionUsingCurrentPolicy(
             captured: capturedTarget?.snapshot,
             current: current?.snapshot,
             sameFocusedElement: sameFocusedElement
         )
+        if case let .blocked(reason) = decision {
+            return DeliveryReport(
+                outcome: .blocked(reason),
+                debugInfo: diagnosticInfo(
+                    captured: capturedTarget,
+                    current: current,
+                    insertionResult: explanation(for: reason)
+                )
+            )
+        }
 
-        if case let .copyOnly(reason) = decision {
-            if copyToClipboard, !writeTextToClipboard(cleanText) {
+        // Revalidate immediately before touching the selected field; text is never staged on NSPasteboard.
+        let targetAtInsertion = captureDeliveryTarget()
+        let sameFocusAtInsertion = Self.isSameFocusedElement(capturedTarget, targetAtInsertion)
+        let finalDecision = decisionUsingCurrentPolicy(
+            captured: capturedTarget?.snapshot,
+            current: targetAtInsertion?.snapshot,
+            sameFocusedElement: sameFocusAtInsertion
+        )
+        if case let .blocked(reason) = finalDecision {
+            return DeliveryReport(
+                outcome: .blocked(reason),
+                debugInfo: diagnosticInfo(
+                    captured: capturedTarget,
+                    current: targetAtInsertion,
+                    insertionResult: explanation(for: reason)
+                )
+            )
+        }
+        guard let targetAtInsertion else {
+            return DeliveryReport(
+                outcome: .failed,
+                debugInfo: diagnosticInfo(
+                    captured: capturedTarget,
+                    current: nil,
+                    insertionResult: "EchoType could not verify the target application before text input."
+                )
+            )
+        }
+
+        let correctionInsertion = finalDecision == .insert
+                && defaults.bool(forKey: Self.correctionLearningPreferenceKey)
+            ? correctionInsertionContext(for: cleanText, target: targetAtInsertion.accessibilityTarget)
+            : nil
+
+        var insertedByAccessibility = false
+        if finalDecision == .insert,
+           let accessibilityTarget = targetAtInsertion.accessibilityTarget {
+            insertedByAccessibility = AXUIElementSetAttributeValue(
+                accessibilityTarget.focusedElement,
+                kAXSelectedTextAttribute as CFString,
+                cleanText as CFString
+            ) == .success
+        }
+
+        if !insertedByAccessibility {
+            guard let keyboardTarget = captureDeliveryTarget() else {
+                return DeliveryReport(
+                    outcome: .blocked(.targetUnavailable),
+                    debugInfo: diagnosticInfo(
+                        captured: capturedTarget,
+                        current: nil,
+                        insertionResult: "The foreground app could not be verified immediately before Unicode text input."
+                    )
+                )
+            }
+            let keyboardDecision = decisionUsingCurrentPolicy(
+                captured: targetAtInsertion.snapshot,
+                current: keyboardTarget.snapshot,
+                sameFocusedElement: Self.isSameFocusedElement(targetAtInsertion, keyboardTarget)
+            )
+            if case let .blocked(reason) = keyboardDecision {
+                return DeliveryReport(
+                    outcome: .blocked(reason),
+                    debugInfo: diagnosticInfo(
+                        captured: capturedTarget,
+                        current: keyboardTarget,
+                        insertionResult: explanation(for: reason)
+                    )
+                )
+            }
+            guard keyboardTarget.snapshot.processIdentifier == targetAtInsertion.snapshot.processIdentifier else {
+                return DeliveryReport(
+                    outcome: .blocked(.targetChanged),
+                    debugInfo: diagnosticInfo(
+                        captured: capturedTarget,
+                        current: keyboardTarget,
+                        insertionResult: "The target app restarted before Unicode text input."
+                    )
+                )
+            }
+            guard postUnicodeText(cleanText, to: keyboardTarget.snapshot.processIdentifier) else {
                 return DeliveryReport(
                     outcome: .failed,
                     debugInfo: diagnosticInfo(
                         captured: capturedTarget,
-                        current: current,
-                        skipReason: "Paste skipped (\(explanation(for: reason))); transcript could not be copied to the clipboard."
+                        current: keyboardTarget,
+                        insertionResult: "macOS did not accept Unicode text input for the verified target."
                     )
                 )
             }
-            return DeliveryReport(
-                outcome: .copyOnly(reason),
-                debugInfo: diagnosticInfo(
-                    captured: capturedTarget,
-                    current: current,
-                    skipReason: explanation(for: reason)
-                )
-            )
         }
 
-        let usedSameApplicationFallback = decision == .pasteInSameApplication
-        let currentAccessibilityTarget = current?.accessibilityTarget
-        let correctionInsertion = !usedSameApplicationFallback
-                && defaults.bool(forKey: Self.correctionLearningPreferenceKey)
-            ? correctionInsertionContext(for: cleanText, target: currentAccessibilityTarget)
-            : nil
-
-        let pasteboard = NSPasteboard.general
-        let previousClipboard = snapshotClipboard(pasteboard)
-        guard writeTextToClipboard(cleanText) else {
-            let warning = clipboardRestorationWarning(restoreClipboard(previousClipboard, to: pasteboard))
-            return DeliveryReport(
-                outcome: .failed,
-                debugInfo: diagnosticInfo(
-                    captured: capturedTarget,
-                    current: current,
-                    skipReason: "Paste skipped because EchoType could not write the transcript to the clipboard.",
-                    clipboardWarning: warning
-                ),
-                clipboardRestorationWarning: warning
-            )
-        }
-
-        // Recheck immediately before Command-V so a focus change during clipboard setup cannot
-        // redirect the transcript into a different application.
-        let targetAtPaste = captureDeliveryTarget()
-        let sameFocusAtPaste = Self.isSameFocusedElement(capturedTarget, targetAtPaste)
-        let finalDecision = currentPolicy.decision(
-            captured: capturedTarget?.snapshot,
-            current: targetAtPaste?.snapshot,
-            sameFocusedElement: sameFocusAtPaste
-        )
-        if case let .copyOnly(reason) = finalDecision {
-            let warning = copyToClipboard
-                ? nil
-                : clipboardRestorationWarning(restoreClipboard(previousClipboard, to: pasteboard))
-            return DeliveryReport(
-                outcome: .copyOnly(reason),
-                debugInfo: diagnosticInfo(
-                    captured: capturedTarget,
-                    current: targetAtPaste,
-                    skipReason: explanation(for: reason),
-                    clipboardWarning: warning
-                ),
-                clipboardRestorationWarning: warning
-            )
-        }
-
-        let insertedClipboardChangeCount = pasteboard.changeCount
-        guard postKey(virtualKey: 9, command: true) else {
-            let warning = copyToClipboard
-                ? nil
-                : clipboardRestorationWarning(restoreClipboard(previousClipboard, to: pasteboard))
-            return DeliveryReport(
-                outcome: .failed,
-                debugInfo: diagnosticInfo(
-                    captured: capturedTarget,
-                    current: targetAtPaste,
-                    skipReason: "Paste skipped because macOS did not accept EchoType's Command-V event.",
-                    clipboardWarning: warning
-                ),
-                clipboardRestorationWarning: warning
-            )
-        }
-
-        let verifiedAXTarget = finalDecision == .insert ? targetAtPaste?.accessibilityTarget : nil
+        let verifiedAXTarget = finalDecision == .insert ? targetAtInsertion.accessibilityTarget : nil
         let correctionDeadline = ContinuousClock().now.advanced(by: .seconds(10))
         if let correctionInsertion, let verifiedAXTarget {
             try? await Task.sleep(for: .milliseconds(100))
@@ -282,41 +354,39 @@ final class TextInsertionService {
         }
 
         var submitted = false
-        if autoSend, verifiedAXTarget != nil {
+        if TextInsertionPolicy.canSubmitAfterInsertion(
+            autoSendEnabled: autoSend,
+            insertionConfirmedByAccessibility: insertedByAccessibility
+        ), let verifiedAXTarget {
             try? await Task.sleep(for: .milliseconds(140))
             if sameTargetIsStillFocused(capturedTarget?.accessibilityTarget) {
-                submitted = postKey(virtualKey: 36, command: false)
+                submitted = postKey(
+                    virtualKey: 36,
+                    command: false,
+                    to: verifiedAXTarget.snapshot.processIdentifier
+                )
             }
         }
         if submitted { stopCorrectionObservation() }
 
-        var clipboardWarning: String?
-        if !copyToClipboard {
-            try? await Task.sleep(for: .milliseconds(550))
-            if pasteboard.changeCount == insertedClipboardChangeCount {
-                clipboardWarning = clipboardRestorationWarning(restoreClipboard(previousClipboard, to: pasteboard))
-            }
-        }
-        let fallbackUsed = usedSameApplicationFallback || finalDecision == .pasteInSameApplication
+        let usedKeyboardFallback = !insertedByAccessibility
         let outcome: Outcome = if submitted {
             .insertedAndSubmitted
-        } else if fallbackUsed {
-            .insertedViaSameApplicationFallback
+        } else if usedKeyboardFallback {
+            .insertedViaKeyboardEvents
         } else {
             .inserted
         }
-        let pasteMethod = fallbackUsed
-            ? "Command-V was sent while the same app remained in front; Accessibility could not verify the exact text field, so acceptance by the app cannot be confirmed."
-            : "Command-V was sent to the Accessibility-verified text field; acceptance by the app cannot be confirmed."
+        let insertionResult = usedKeyboardFallback
+            ? "Unicode keyboard input was sent to the same foreground application; app acceptance cannot be confirmed."
+            : "Accessibility inserted text into the verified field."
         return DeliveryReport(
             outcome: outcome,
             debugInfo: diagnosticInfo(
                 captured: capturedTarget,
-                current: targetAtPaste,
-                skipReason: pasteMethod,
-                clipboardWarning: clipboardWarning
-            ),
-            clipboardRestorationWarning: clipboardWarning
+                current: targetAtInsertion,
+                insertionResult: submitted ? "Text was inserted and Return was sent." : insertionResult
+            )
         )
     }
 
@@ -334,8 +404,7 @@ final class TextInsertionService {
     private func diagnosticInfo(
         captured: CapturedDeliveryTarget?,
         current: CapturedDeliveryTarget?,
-        skipReason: String,
-        clipboardWarning: String? = nil
+        insertionResult: String
     ) -> String {
         let stoppedApp = captured?.snapshot.applicationName ?? "Unknown"
         let readyApp = current?.snapshot.applicationName ?? "Unknown"
@@ -346,8 +415,7 @@ final class TextInsertionService {
             appWhenTextWasReady: readyApp,
             focusedElementAtStop: stoppedFocusType,
             focusedElementWhenReady: readyFocusType,
-            pasteResult: skipReason,
-            clipboardRestorationWarning: clipboardWarning
+            insertionResult: insertionResult
         ).description
     }
 
@@ -356,9 +424,13 @@ final class TextInsertionService {
         case .targetUnavailable:
             "The frontmost app could not be verified at dictation stop or delivery time."
         case .targetChanged:
-            "The frontmost app changed between dictation stop and paste."
+            "The frontmost app changed between dictation stop and text insertion."
         case .secureField:
-            "The focused field is marked as secure, so pasting is disabled."
+            "The focused field is marked as secure, so text input is disabled."
+        case .unsupportedField:
+            "The focused control could not be verified as a text field, so text input was blocked."
+        case .policyUnavailable:
+            "EchoType could not verify the excluded-app policy or app identity, so text input was blocked."
         case .excludedApplication:
             "The frontmost app is excluded by EchoType's app policy."
         }
@@ -367,7 +439,7 @@ final class TextInsertionService {
     private func sameTargetIsStillFocused(_ captured: CapturedInsertionTarget?) -> Bool {
         guard let captured, let current = captureFocusedTarget() else { return false }
         guard CFEqual(captured.focusedElement, current.focusedElement) else { return false }
-        return currentPolicy.decision(
+        return decisionUsingCurrentPolicy(
             captured: captured.snapshot,
             current: current.snapshot,
             sameFocusedElement: true
@@ -640,7 +712,7 @@ final class TextInsertionService {
               let applicationBundleIdentifier = application.bundleIdentifier,
               application.processIdentifier == expectedTarget.snapshot.processIdentifier,
               applicationBundleIdentifier == expectedBundleIdentifier,
-              !currentPolicy.isExcluded(bundleIdentifier: applicationBundleIdentifier),
+              !isExcludedOrUnverifiable(applicationBundleIdentifier),
               let current = captureFocusedTarget(),
               CFEqual(expectedTarget.focusedElement, current.focusedElement),
               current.snapshot.processIdentifier == expectedTarget.snapshot.processIdentifier,
@@ -650,7 +722,7 @@ final class TextInsertionService {
               ["AXTextField", "AXTextArea", "AXSearchField"].contains(role),
               role != "AXSecureTextField",
               subrole != "AXSecureTextField",
-              !currentPolicy.isExcluded(bundleIdentifier: current.snapshot.bundleIdentifier) else {
+              !isExcludedOrUnverifiable(current.snapshot.bundleIdentifier) else {
             return false
         }
         return true
@@ -685,7 +757,7 @@ final class TextInsertionService {
         correctionObserverRetain = nil
     }
 
-    private func captureFocusedTarget() -> CapturedInsertionTarget? {
+    private func captureFocusedTarget(requireFrontmostProcessMatch: Bool = true) -> CapturedInsertionTarget? {
         guard AXIsProcessTrusted(),
               let application = NSWorkspace.shared.frontmostApplication else { return nil }
 
@@ -694,6 +766,13 @@ final class TextInsertionService {
         guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focusedValue) == .success,
               let focusedValue else { return nil }
         let focusedElement = focusedValue as! AXUIElement
+        if requireFrontmostProcessMatch {
+            var focusedProcessIdentifier: pid_t = 0
+            guard AXUIElementGetPid(focusedElement, &focusedProcessIdentifier) == .success,
+                  focusedProcessIdentifier == application.processIdentifier else {
+                return nil
+            }
+        }
 
         let role = accessibilityAttributeString(kAXRoleAttribute, of: focusedElement)
         let subrole = accessibilityAttributeString(kAXSubroleAttribute, of: focusedElement)
@@ -707,16 +786,83 @@ final class TextInsertionService {
         return CapturedInsertionTarget(snapshot: snapshot, focusedElement: focusedElement)
     }
 
-    private var currentPolicy: TextInsertionPolicy {
-        guard let data = defaults.data(forKey: ExcludedApplicationsViewModel.defaultsKey),
-              let policy = try? JSONDecoder().decode(ExcludedAppPolicy.self, from: data) else {
-            return TextInsertionPolicy()
+    private func rewriteSelectionSnapshot(for target: CapturedInsertionTarget) -> RewriteSelectionSnapshot? {
+        var selectedValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            target.focusedElement,
+            kAXSelectedTextAttribute as CFString,
+            &selectedValue
+        ) == .success,
+              let selectedValue,
+              let selectedText = selectedValue as? String,
+              let selectedRange = accessibilityRange(kAXSelectedTextRangeAttribute, of: target.focusedElement),
+              let fieldCharacterCount = accessibilityCharacterCount(of: target.focusedElement),
+              selectedRange.length > 0 else {
+            return nil
         }
-        let identifiers = Set(
+        return RewriteSelectionSnapshot(
+            target: target.snapshot,
+            selectedText: selectedText,
+            rangeLocation: selectedRange.location,
+            rangeLength: selectedRange.length,
+            fieldCharacterCount: fieldCharacterCount
+        )
+    }
+
+    private func rewriteSelectionStillMatches(_ captured: CapturedRewriteSelection) -> Bool {
+        guard let excludedBundleIdentifiers = additionalExcludedBundleIdentifiers,
+              let currentTarget = captureFocusedTarget(requireFrontmostProcessMatch: true),
+              CFEqual(captured.focusedElement, currentTarget.focusedElement),
+              RewriteSelectionPolicy.targetDecision(
+                for: currentTarget.snapshot,
+                additionalExcludedBundleIdentifiers: excludedBundleIdentifiers
+              ) == nil,
+              let currentSelection = rewriteSelectionSnapshot(for: currentTarget) else {
+            return false
+        }
+        return RewriteSelectionPolicy.canReplace(
+            captured: captured.snapshot,
+            current: currentSelection,
+            sameFocusedElement: true,
+            additionalExcludedBundleIdentifiers: excludedBundleIdentifiers
+        )
+    }
+
+    private var additionalExcludedBundleIdentifiers: Set<String>? {
+        guard let policy = ExcludedAppPolicy.resolvePersisted(
+            defaults.data(forKey: ExcludedApplicationsViewModel.defaultsKey)
+        ) else { return nil }
+        return Set(
             (policy.defaultExcludedApplications + policy.userExcludedApplications)
                 .map(\.bundleIdentifier)
         )
+    }
+
+    private var currentPolicy: TextInsertionPolicy? {
+        guard let identifiers = additionalExcludedBundleIdentifiers else { return nil }
         return TextInsertionPolicy(excludedBundleIdentifiers: identifiers)
+    }
+
+    private func isExcludedOrUnverifiable(_ bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier,
+              !bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let currentPolicy else {
+            return true
+        }
+        return currentPolicy.isExcluded(bundleIdentifier: bundleIdentifier)
+    }
+
+    private func decisionUsingCurrentPolicy(
+        captured: TextInsertionSnapshot?,
+        current: TextInsertionSnapshot?,
+        sameFocusedElement: Bool
+    ) -> TextInsertionDecision {
+        guard let currentPolicy else { return .blocked(.policyUnavailable) }
+        return currentPolicy.decision(
+            captured: captured,
+            current: current,
+            sameFocusedElement: sameFocusedElement
+        )
     }
 
     private func accessibilityAttributeString(_ attribute: String, of element: AXUIElement) -> String? {
@@ -777,41 +923,43 @@ final class TextInsertionService {
         return value as? String
     }
 
-    private func writeTextToClipboard(_ text: String) -> Bool {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        return pasteboard.setString(text, forType: .string)
-    }
-
-    private func snapshotClipboard(_ pasteboard: NSPasteboard) -> [ClipboardItemSnapshot] {
-        (pasteboard.pasteboardItems ?? []).map { item in
-            let representations = item.types.compactMap { type -> (NSPasteboard.PasteboardType, Data)? in
-                guard let data = item.data(forType: type) else { return nil }
-                return (type, data)
-            }
-            return ClipboardItemSnapshot(representations: representations)
-        }
-    }
-
-    private func restoreClipboard(_ snapshots: [ClipboardItemSnapshot], to pasteboard: NSPasteboard) -> Bool {
-        pasteboard.clearContents()
-        guard !snapshots.isEmpty else { return true }
-        let items: [NSPasteboardItem] = snapshots.map { snapshot in
-            let item = NSPasteboardItem()
-            for (type, data) in snapshot.representations {
-                item.setData(data, forType: type)
-            }
-            return item
-        }
-        return pasteboard.writeObjects(items)
-    }
-
-    private func clipboardRestorationWarning(_ succeeded: Bool) -> String? {
-        succeeded ? nil : "EchoType could not restore the clipboard contents that were present before dictation delivery."
-    }
-
-    private func postKey(virtualKey: CGKeyCode, command: Bool) -> Bool {
+    private func postUnicodeText(_ text: String, to processIdentifier: pid_t) -> Bool {
         guard AXIsProcessTrusted(),
+              processIdentifier > 0,
+              let source = CGEventSource(stateID: .hidSystemState) else {
+            return false
+        }
+        let chunks = KeyboardTextEventPolicy.unicodeChunks(for: text)
+        guard !chunks.isEmpty else { return false }
+
+        // An unmapped keycode ensures apps that ignore the Unicode field do not receive a
+        // different printable character through ordinary keyboard-layout translation.
+        let unmappedKeyCode = CGKeyCode.max
+        var events: [(down: CGEvent, up: CGEvent)] = []
+        for chunk in chunks {
+            guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: unmappedKeyCode, keyDown: true),
+                  let keyUp = CGEvent(keyboardEventSource: source, virtualKey: unmappedKeyCode, keyDown: false) else {
+                return false
+            }
+            chunk.withUnsafeBufferPointer { buffer in
+                guard let baseAddress = buffer.baseAddress else { return }
+                keyDown.keyboardSetUnicodeString(
+                    stringLength: buffer.count,
+                    unicodeString: baseAddress
+                )
+            }
+            events.append((down: keyDown, up: keyUp))
+        }
+        for eventPair in events {
+            eventPair.down.postToPid(processIdentifier)
+            eventPair.up.postToPid(processIdentifier)
+        }
+        return true
+    }
+
+    private func postKey(virtualKey: CGKeyCode, command: Bool, to processIdentifier: pid_t) -> Bool {
+        guard AXIsProcessTrusted(),
+              processIdentifier > 0,
               let source = CGEventSource(stateID: .hidSystemState),
               let keyDown = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: false) else {
@@ -821,8 +969,8 @@ final class TextInsertionService {
             keyDown.flags = .maskCommand
             keyUp.flags = .maskCommand
         }
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
+        keyDown.postToPid(processIdentifier)
+        keyUp.postToPid(processIdentifier)
         return true
     }
 }

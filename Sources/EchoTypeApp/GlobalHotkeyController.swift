@@ -38,22 +38,60 @@ final class GlobalHotkeyController {
     private(set) var selectedKeyCode: UInt16
     private(set) var selectedHotkey: GlobalHotkeySelection
     private(set) var backupShortcut: KeyboardShortcutDescriptor?
+    private(set) var voiceMemoShortcut: KeyboardShortcutDescriptor
+    private(set) var rewriteShortcut: KeyboardShortcutDescriptor
     private(set) var selectedMode: ModifierHotkeyMode
+
+    var voiceActionShortcutConflictMessage: String? {
+        if KeyboardShortcutConflictPolicy.conflicts(
+            voiceMemoShortcut,
+            with: [selectedShortcut, backupShortcut],
+            reservedModifierFlags: selectedModifierFlags
+        ) {
+            return "Voice Memo hotkey matches or overlaps the Dictation hotkey. Change one of them to use Voice Memo."
+        }
+        if KeyboardShortcutConflictPolicy.conflicts(
+            rewriteShortcut,
+            with: [selectedShortcut, backupShortcut, voiceMemoShortcut],
+            reservedModifierFlags: selectedModifierFlags
+        ) {
+            return "Rewrite hotkey matches or overlaps another EchoType hotkey. Change one of them to use Rewrite."
+        }
+        return nil
+    }
 
     var selectedShortcut: KeyboardShortcutDescriptor? {
         guard case let .shortcut(shortcut) = selectedHotkey else { return nil }
         return shortcut
     }
 
+    private var selectedModifierFlags: KeyboardShortcutModifierFlags {
+        guard case let .modifierKey(keyCode) = selectedHotkey else { return [] }
+        switch keyCode {
+        case Self.controlKeyCode: .control
+        case Self.rightOptionKeyCode: .option
+        case Self.functionKeyCode: .function
+        default: []
+        }
+    }
+
     var onToggleRecording: (@MainActor () -> Void)?
-    var onStartRecording: (@MainActor () -> Void)?
+    var onStartRecording: (@MainActor () -> Bool)?
     var onStopRecording: (@MainActor () -> Void)?
+    var onStartVoiceMemoRecording: (@MainActor () -> Bool)?
+    var onStopVoiceMemoRecording: (@MainActor () -> Void)?
+    var onStartVoiceRewriteRecording: (@MainActor () -> Bool)?
+    var onStopVoiceRewriteRecording: (@MainActor () -> Void)?
 
     @ObservationIgnored private var globalMonitor: Any?
     @ObservationIgnored private var localMonitor: Any?
     @ObservationIgnored private var recognizer = ModifierTapRecognizer()
     @ObservationIgnored private var shortcutRecognizer: KeyboardShortcutRecognizer?
+    @ObservationIgnored private var voiceMemoShortcutRecognizer: KeyboardShortcutRecognizer?
+    @ObservationIgnored private var rewriteShortcutRecognizer: KeyboardShortcutRecognizer?
     @ObservationIgnored private var isHoldRecordingActive = false
+    @ObservationIgnored private var isVoiceMemoHoldActive = false
+    @ObservationIgnored private var isVoiceRewriteHoldActive = false
     @ObservationIgnored private var lastKeyboardEventDescription: String?
     @ObservationIgnored private var lastRecognizedAction: String?
     @ObservationIgnored private let defaults: UserDefaults
@@ -62,6 +100,18 @@ final class GlobalHotkeyController {
     private static let modeDefaultsKey = "EchoType.globalHotkeyMode"
     private static let selectedShortcutDefaultsKey = "EchoType.globalHotkeyShortcut"
     private static let backupShortcutDefaultsKey = "EchoType.globalHotkeyBackupShortcut"
+    private static let voiceMemoShortcutDefaultsKey = "EchoType.voiceMemoShortcut"
+    private static let rewriteShortcutDefaultsKey = "EchoType.voiceRewriteShortcut"
+    private static let defaultVoiceMemoShortcut = KeyboardShortcutDescriptor(
+        keyCode: 46,
+        requiredModifierFlags: [.command, .shift],
+        displayLabel: "⌘⇧M"
+    )!
+    private static let defaultRewriteShortcut = KeyboardShortcutDescriptor(
+        keyCode: 15,
+        requiredModifierFlags: [.command, .shift],
+        displayLabel: "⌘⇧R"
+    )!
     private static let controlKeyCode: UInt16 = 59
     private static let rightOptionKeyCode: UInt16 = 61
     private static let functionKeyCode: UInt16 = 63
@@ -91,6 +141,12 @@ final class GlobalHotkeyController {
         }
         backupShortcut = Self.decodeShortcut(defaults.data(forKey: Self.backupShortcutDefaultsKey))
             .flatMap { Self.isCustomKeyCode($0.keyCode) ? $0 : nil }
+        voiceMemoShortcut = Self.decodeShortcut(defaults.data(forKey: Self.voiceMemoShortcutDefaultsKey))
+            .flatMap { Self.isCustomKeyCode($0.keyCode) ? $0 : nil }
+            ?? Self.defaultVoiceMemoShortcut
+        rewriteShortcut = Self.decodeShortcut(defaults.data(forKey: Self.rewriteShortcutDefaultsKey))
+            .flatMap { Self.isCustomKeyCode($0.keyCode) ? $0 : nil }
+            ?? Self.defaultRewriteShortcut
 
         resetRecognizers()
     }
@@ -113,6 +169,7 @@ final class GlobalHotkeyController {
             ) {
                 stopActiveHoldIfNeeded()
             }
+            stopActiveVoiceActionsIfNeeded()
             removeMonitors()
             isEnabled = false
             resetRecognizers()
@@ -191,6 +248,38 @@ final class GlobalHotkeyController {
         return true
     }
 
+    /// Stores a Voice Memo hold-to-talk chord distinct from the other configured shortcuts.
+    @discardableResult
+    func chooseVoiceMemoShortcut(_ shortcut: KeyboardShortcutDescriptor) -> Bool {
+        guard Self.isCustomKeyCode(shortcut.keyCode),
+              !KeyboardShortcutConflictPolicy.conflicts(
+                shortcut,
+                with: [selectedShortcut, backupShortcut, rewriteShortcut],
+                reservedModifierFlags: selectedModifierFlags
+              ),
+              let data = try? JSONEncoder().encode(shortcut) else { return false }
+        voiceMemoShortcut = shortcut
+        defaults.set(data, forKey: Self.voiceMemoShortcutDefaultsKey)
+        resetVoiceActionRecognizers()
+        return true
+    }
+
+    /// Stores a Rewrite hold-to-talk chord distinct from the other configured shortcuts.
+    @discardableResult
+    func chooseRewriteShortcut(_ shortcut: KeyboardShortcutDescriptor) -> Bool {
+        guard Self.isCustomKeyCode(shortcut.keyCode),
+              !KeyboardShortcutConflictPolicy.conflicts(
+                shortcut,
+                with: [selectedShortcut, backupShortcut, voiceMemoShortcut],
+                reservedModifierFlags: selectedModifierFlags
+              ),
+              let data = try? JSONEncoder().encode(shortcut) else { return false }
+        rewriteShortcut = shortcut
+        defaults.set(data, forKey: Self.rewriteShortcutDefaultsKey)
+        resetVoiceActionRecognizers()
+        return true
+    }
+
     func chooseMode(_ mode: ModifierHotkeyMode) {
         guard selectedMode != mode else { return }
         selectedMode = mode
@@ -226,8 +315,14 @@ final class GlobalHotkeyController {
             default:
                 return
             }
-            Task { @MainActor [weak self] in
-                self?.handle(input, source: "another app")
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    self?.handle(input, source: "another app")
+                }
+            } else {
+                Task { @MainActor [weak self] in
+                    self?.handle(input, source: "another app")
+                }
             }
         }
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
@@ -246,8 +341,14 @@ final class GlobalHotkeyController {
             default:
                 return event
             }
-            Task { @MainActor [weak self] in
-                self?.handle(input, source: "EchoType")
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    self?.handle(input, source: "EchoType")
+                }
+            } else {
+                Task { @MainActor [weak self] in
+                    self?.handle(input, source: "EchoType")
+                }
             }
             return event
         }
@@ -268,6 +369,7 @@ final class GlobalHotkeyController {
         removeMonitors()
         isEnabled = false
         stopActiveHoldIfNeeded()
+        stopActiveVoiceActionsIfNeeded()
         resetRecognizers()
         lastRecognizedAction = nil
         refreshStatusMessage()
@@ -309,19 +411,47 @@ final class GlobalHotkeyController {
 
         case let .keyDown(keyCode, modifierFlags, isRepeat):
             dispatch(recognizer.consume(.otherKeyDown))
-            guard var shortcutRecognizer else { break }
             let flags = Self.shortcutModifierFlags(
                 from: NSEvent.ModifierFlags(rawValue: modifierFlags).intersection(.deviceIndependentFlagsMask)
             )
-            let action = shortcutRecognizer.consume(.keyDown(keyCode: keyCode, modifierFlags: flags, isRepeat: isRepeat))
-            self.shortcutRecognizer = shortcutRecognizer
-            dispatch(action)
+            let keyDownEvent = KeyboardShortcutEvent.keyDown(
+                keyCode: keyCode,
+                modifierFlags: flags,
+                isRepeat: isRepeat
+            )
+            if var shortcutRecognizer {
+                let action = shortcutRecognizer.consume(keyDownEvent)
+                self.shortcutRecognizer = shortcutRecognizer
+                dispatch(action)
+            }
+            if var voiceMemoShortcutRecognizer {
+                let action = voiceMemoShortcutRecognizer.consume(keyDownEvent)
+                self.voiceMemoShortcutRecognizer = voiceMemoShortcutRecognizer
+                dispatchVoiceMemo(action)
+            }
+            if var rewriteShortcutRecognizer {
+                let action = rewriteShortcutRecognizer.consume(keyDownEvent)
+                self.rewriteShortcutRecognizer = rewriteShortcutRecognizer
+                dispatchVoiceRewrite(action)
+            }
 
         case let .keyUp(keyCode):
-            guard var shortcutRecognizer else { break }
-            let action = shortcutRecognizer.consume(.keyUp(keyCode: keyCode))
-            self.shortcutRecognizer = shortcutRecognizer
-            dispatch(action)
+            let keyUpEvent = KeyboardShortcutEvent.keyUp(keyCode: keyCode)
+            if var shortcutRecognizer {
+                let action = shortcutRecognizer.consume(keyUpEvent)
+                self.shortcutRecognizer = shortcutRecognizer
+                dispatch(action)
+            }
+            if var voiceMemoShortcutRecognizer {
+                let action = voiceMemoShortcutRecognizer.consume(keyUpEvent)
+                self.voiceMemoShortcutRecognizer = voiceMemoShortcutRecognizer
+                dispatchVoiceMemo(action)
+            }
+            if var rewriteShortcutRecognizer {
+                let action = rewriteShortcutRecognizer.consume(keyUpEvent)
+                self.rewriteShortcutRecognizer = rewriteShortcutRecognizer
+                dispatchVoiceRewrite(action)
+            }
         }
         refreshStatusMessage()
     }
@@ -344,6 +474,22 @@ final class GlobalHotkeyController {
                 mode: selectedMode
             )
         }
+        resetVoiceActionRecognizers()
+        refreshStatusMessage()
+    }
+
+    private func resetVoiceActionRecognizers() {
+        stopActiveVoiceActionsIfNeeded()
+        voiceMemoShortcutRecognizer = KeyboardShortcutConflictPolicy.conflicts(
+            voiceMemoShortcut,
+            with: [selectedShortcut, backupShortcut, rewriteShortcut],
+            reservedModifierFlags: selectedModifierFlags
+        ) ? nil : KeyboardShortcutRecognizer(primary: voiceMemoShortcut, mode: .holdToTalk)
+        rewriteShortcutRecognizer = KeyboardShortcutConflictPolicy.conflicts(
+            rewriteShortcut,
+            with: [selectedShortcut, backupShortcut, voiceMemoShortcut],
+            reservedModifierFlags: selectedModifierFlags
+        ) ? nil : KeyboardShortcutRecognizer(primary: rewriteShortcut, mode: .holdToTalk)
         refreshStatusMessage()
     }
 
@@ -353,16 +499,64 @@ final class GlobalHotkeyController {
         onStopRecording?()
     }
 
+    private func stopActiveVoiceActionsIfNeeded() {
+        if isVoiceMemoHoldActive {
+            isVoiceMemoHoldActive = false
+            onStopVoiceMemoRecording?()
+        }
+        if isVoiceRewriteHoldActive {
+            isVoiceRewriteHoldActive = false
+            onStopVoiceRewriteRecording?()
+        }
+    }
+
+    private func dispatchVoiceMemo(_ action: ModifierHotkeyAction?) {
+        switch action {
+        case .startRecording:
+            guard onStartVoiceMemoRecording?() == true else { return }
+            lastRecognizedAction = "start voice memo"
+            isVoiceMemoHoldActive = true
+        case .stopRecording:
+            guard isVoiceMemoHoldActive else { return }
+            lastRecognizedAction = "stop voice memo"
+            isVoiceMemoHoldActive = false
+            onStopVoiceMemoRecording?()
+        case .toggleRecording, nil:
+            break
+        }
+        refreshStatusMessage()
+    }
+
+    private func dispatchVoiceRewrite(_ action: ModifierHotkeyAction?) {
+        switch action {
+        case .startRecording:
+            guard onStartVoiceRewriteRecording?() == true else { return }
+            lastRecognizedAction = "start voice rewrite"
+            isVoiceRewriteHoldActive = true
+        case .stopRecording:
+            guard isVoiceRewriteHoldActive else { return }
+            lastRecognizedAction = "stop voice rewrite"
+            isVoiceRewriteHoldActive = false
+            onStopVoiceRewriteRecording?()
+        case .toggleRecording, nil:
+            break
+        }
+        refreshStatusMessage()
+    }
+
     private func dispatch(_ action: ModifierHotkeyAction?) {
         switch action {
         case .toggleRecording:
             lastRecognizedAction = "toggle dictation"
             onToggleRecording?()
         case .startRecording:
+            guard onStartRecording?() == true else { return }
             lastRecognizedAction = "start dictation"
             isHoldRecordingActive = true
-            onStartRecording?()
         case .stopRecording:
+            guard DictationTogglePolicy.canStopHoldRecording(
+                isHoldRecordingActive: isHoldRecordingActive
+            ) else { return }
             lastRecognizedAction = "stop dictation"
             isHoldRecordingActive = false
             onStopRecording?()

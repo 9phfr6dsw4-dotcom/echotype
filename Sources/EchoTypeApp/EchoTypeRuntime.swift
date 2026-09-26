@@ -21,6 +21,7 @@ final class EchoTypeRuntime {
     let smartLinks: SmartLinksViewModel
     let launchAtLogin: LaunchAtLoginController
     let textCleanup: TranscriptTextCleanupViewModel
+    let voiceMemoDestination: VoiceMemoDestinationController
 
     var deliveryMessage: String?
     var deliveryDebugInfo: String?
@@ -32,14 +33,35 @@ final class EchoTypeRuntime {
         )
     }
 
+    var voiceRewriteAvailabilityMessage: String { voiceRewriteService.availabilityMessage }
+
     @ObservationIgnored private let overlayWindow: RecordingOverlayWindowController
     @ObservationIgnored private var dismissOverlayTask: Task<Void, Never>?
     @ObservationIgnored private var workspaceActivationObserver: NSObjectProtocol?
     @ObservationIgnored private var recordingStartGate = RecordingStartGate()
+    @ObservationIgnored private var isRecordingStartTaskInFlight = false
+    @ObservationIgnored private var recordingDiscardGate = RecordingDiscardGate()
+    @ObservationIgnored private var pendingRecordingActionKind: RecordingActionKind?
     @ObservationIgnored private var isDeliveringTranscript = false
     @ObservationIgnored private var recordingStartedAt: Date?
     @ObservationIgnored private var recordingEngineID: String?
     @ObservationIgnored private var finalTranscriptOverride: String?
+    @ObservationIgnored private var activeRecordingAction: ActiveRecordingAction = .dictation
+    @ObservationIgnored private let voiceRewriteService = OnDeviceVoiceRewriteService()
+
+    private enum ActiveRecordingAction {
+        case dictation
+        case voiceMemo(directory: URL)
+        case rewrite(selection: CapturedRewriteSelection)
+
+        var kind: RecordingActionKind {
+            switch self {
+            case .dictation: .dictation
+            case .voiceMemo: .voiceMemo
+            case .rewrite: .rewrite
+            }
+        }
+    }
 
     init() {
         let microphones = MicrophoneSettingsViewModel()
@@ -51,6 +73,7 @@ final class EchoTypeRuntime {
         let smartLinks = SmartLinksViewModel()
         let launchAtLogin = LaunchAtLoginController()
         let textCleanup = TranscriptTextCleanupViewModel()
+        let voiceMemoDestination = VoiceMemoDestinationController()
         let excludedApplications = ExcludedApplicationsViewModel()
         let overlayModel = RecordingOverlayModel()
         let recordingFeedback = RecordingFeedbackController()
@@ -68,6 +91,7 @@ final class EchoTypeRuntime {
         self.smartLinks = smartLinks
         self.launchAtLogin = launchAtLogin
         self.textCleanup = textCleanup
+        self.voiceMemoDestination = voiceMemoDestination
         self.hotkey = GlobalHotkeyController()
         self.textInsertion = TextInsertionService()
         self.overlayWindow = RecordingOverlayWindowController(model: overlayModel)
@@ -81,56 +105,164 @@ final class EchoTypeRuntime {
         }
         hotkey.onToggleRecording = { [weak self] in
             Task { @MainActor [weak self] in
-                await self?.toggleRecording()
+                await self?.toggleDictationFromHotkey()
             }
         }
         hotkey.onStartRecording = { [weak self] in
-            self?.startHotkeyRecording()
+            self?.startHotkeyRecording() ?? false
         }
         hotkey.onStopRecording = { [weak self] in
-            Task { @MainActor [weak self] in
-                await self?.stopOrCancelHotkeyRecording()
-            }
+            self?.stopOrCancelHotkeyRecording(for: .dictation)
+        }
+        hotkey.onStartVoiceMemoRecording = { [weak self] in
+            self?.startVoiceMemoHotkeyRecording() ?? false
+        }
+        hotkey.onStopVoiceMemoRecording = { [weak self] in
+            self?.stopOrCancelHotkeyRecording(for: .voiceMemo)
+        }
+        hotkey.onStartVoiceRewriteRecording = { [weak self] in
+            self?.startVoiceRewriteHotkeyRecording() ?? false
+        }
+        hotkey.onStopVoiceRewriteRecording = { [weak self] in
+            self?.stopOrCancelHotkeyRecording(for: .rewrite)
         }
         workspaceActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.hotkey.refreshPermission()
-                self.textInsertion.cancelCorrectionObservationIfTargetIsInvalid()
-                guard self.dictation.isRecording,
-                      self.textInsertion.isFrontmostAppExcluded() else { return }
-                await self.discardRecordingInExcludedApp()
+            MainActor.assumeIsolated {
+                self?.handleWorkspaceActivation()
             }
         }
         hotkey.refreshPermission()
     }
 
-    private func startHotkeyRecording() {
-        guard let startToken = recordingStartGate.begin() else { return }
-        Task { @MainActor [weak self] in
-            await self?.startRecording(startToken: startToken)
+    private func handleWorkspaceActivation() {
+        hotkey.refreshPermission()
+        textInsertion.cancelCorrectionObservationIfTargetIsInvalid()
+
+        if let pendingActionKind = pendingRecordingActionKind {
+            if textInsertion.isFrontmostAppExcluded(),
+               let canceledAction = invalidatePendingRecordingStart(for: pendingActionKind) {
+                self.finishCanceledRecordingStart(canceledAction)
+            }
+            return
         }
+
+        guard dictation.isRecording,
+              textInsertion.isFrontmostAppExcluded(),
+              recordingDiscardGate.request() else { return }
+        Task { @MainActor [weak self] in
+            await self?.discardRecordingInExcludedApp()
+        }
+    }
+
+    private func startVoiceMemoHotkeyRecording() -> Bool {
+        guard canStartVoiceAction() else { return false }
+        guard !textInsertion.isFrontmostAppExcludedForVoiceAction() else {
+            showVoiceActionMessage("Voice Memo is disabled while an excluded app is frontmost or its safety settings cannot be verified.")
+            return false
+        }
+        guard let directory = voiceMemoDestination.resolvedDirectory() else {
+            showVoiceActionMessage(voiceMemoDestination.errorMessage ?? "Choose a voice memo folder in Settings before recording.")
+            return false
+        }
+        return beginVoiceAction(.voiceMemo(directory: directory))
+    }
+
+    private func startVoiceRewriteHotkeyRecording() -> Bool {
+        guard canStartVoiceAction() else { return false }
+        switch textInsertion.captureRewriteSelection() {
+        case .success(let selection):
+            return beginVoiceAction(.rewrite(selection: selection))
+        case .failure(let decision):
+            showVoiceActionMessage(Self.message(for: decision))
+            return false
+        }
+    }
+
+    private func canStartVoiceAction() -> Bool {
+        guard !recordingDiscardGate.blocksRecordingEvents,
+              !dictation.isRecording,
+              !dictation.isTranscribing,
+              !isDeliveringTranscript,
+              !isRecordingStartTaskInFlight else {
+            deliveryMessage = "Finish the current recording before starting another voice action."
+            return false
+        }
+        return true
+    }
+
+    private func beginVoiceAction(_ action: ActiveRecordingAction) -> Bool {
+        guard !isRecordingStartTaskInFlight,
+              let startToken = recordingStartGate.begin() else { return false }
+        isRecordingStartTaskInFlight = true
+        pendingRecordingActionKind = action.kind
+        Task { @MainActor [weak self] in
+            await self?.startRecording(startToken: startToken, action: action)
+        }
+        return true
+    }
+
+    private func startHotkeyRecording() -> Bool {
+        guard !recordingDiscardGate.blocksRecordingEvents,
+              !dictation.isRecording,
+              !dictation.isTranscribing,
+              !isDeliveringTranscript,
+              !isRecordingStartTaskInFlight,
+              let startToken = recordingStartGate.begin() else { return false }
+        isRecordingStartTaskInFlight = true
+        pendingRecordingActionKind = .dictation
+        Task { @MainActor [weak self] in
+            await self?.startRecording(startToken: startToken, action: .dictation)
+        }
+        return true
     }
 
     func startRecording() async {
-        guard let startToken = recordingStartGate.begin() else { return }
-        await startRecording(startToken: startToken)
+        guard !recordingDiscardGate.blocksRecordingEvents,
+              !dictation.isRecording,
+              !dictation.isTranscribing,
+              !isDeliveringTranscript,
+              !isRecordingStartTaskInFlight,
+              let startToken = recordingStartGate.begin() else { return }
+        isRecordingStartTaskInFlight = true
+        pendingRecordingActionKind = .dictation
+        await startRecording(startToken: startToken, action: .dictation)
     }
 
-    private func startRecording(startToken: UInt64) async {
-        defer { recordingStartGate.finish(startToken) }
+    private func startRecording(startToken: UInt64, action: ActiveRecordingAction) async {
+        defer {
+            recordingStartGate.finish(startToken)
+            isRecordingStartTaskInFlight = false
+            pendingRecordingActionKind = nil
+        }
         guard recordingStartGate.isCurrent(startToken) else { return }
+        guard !dictation.isRecording, !dictation.isTranscribing, !isDeliveringTranscript else {
+            if action.kind != .dictation {
+                showVoiceActionMessage("Finish the current recording before starting another voice action.")
+            }
+            return
+        }
 
-        guard !textInsertion.isFrontmostAppExcluded() else {
-            dictation.errorMessage = "Dictation is disabled while a password manager is frontmost."
+        let startTargetIsExcluded = action.kind == .dictation
+            ? textInsertion.isFrontmostAppExcluded()
+            : textInsertion.isFrontmostAppExcludedForVoiceAction()
+        guard !startTargetIsExcluded else {
+            reportRecordingStartFailure(
+                action.kind == .dictation
+                    ? "Dictation is disabled while an excluded app is frontmost or its safety settings cannot be verified."
+                    : "Voice actions are disabled while an excluded app is frontmost.",
+                action: action
+            )
             return
         }
         guard let catalog = modelLibrary.catalog else {
-            dictation.errorMessage = modelLibrary.startupError ?? "The speech model catalog is unavailable."
+            reportRecordingStartFailure(
+                modelLibrary.startupError ?? "The speech model catalog is unavailable.",
+                action: action
+            )
             return
         }
         let engineID = modelLibrary.selectedEngineID
@@ -140,7 +272,10 @@ final class EchoTypeRuntime {
             installedDownloadIDs: modelLibrary.installedDownloadIDs
         )
         if case .unavailable(let unavailableEngineID) = backend {
-            dictation.errorMessage = "The selected transcription engine is unavailable: \(unavailableEngineID)."
+            reportRecordingStartFailure(
+                "The selected transcription engine is unavailable: \(unavailableEngineID).",
+                action: action
+            )
             return
         }
         let modelDirectory = modelLibrary.installedModelDirectory(for: engineID)
@@ -149,13 +284,31 @@ final class EchoTypeRuntime {
             await dictation.checkAppleSpeechAssets(localeIdentifier: languageIdentifier)
             guard recordingStartGate.isCurrent(startToken) else { return }
             guard dictation.isAppleSpeechPrepared(for: languageIdentifier) else {
-                dictation.errorMessage = dictation.errorMessage
-                    ?? "Apple Speech assets aren't installed for this language yet. Choose Prepare Apple Speech in the Dictation panel, then use the hotkey again."
+                reportRecordingStartFailure(
+                    dictation.errorMessage
+                        ?? "Apple Speech assets aren't installed for this language yet. Choose Prepare Apple Speech in the Dictation panel, then use the hotkey again.",
+                    action: action
+                )
                 return
             }
         }
         if backend != .appleSpeech, modelDirectory == nil {
-            dictation.errorMessage = "The selected local model is not installed or failed verification. Reinstall it from Speech Models."
+            reportRecordingStartFailure(
+                "The selected local model is not installed or failed verification. Reinstall it from Speech Models.",
+                action: action
+            )
+            return
+        }
+        let captureTargetIsExcluded = action.kind == .dictation
+            ? textInsertion.isFrontmostAppExcluded()
+            : textInsertion.isFrontmostAppExcludedForVoiceAction()
+        guard recordingStartGate.isCurrent(startToken), !captureTargetIsExcluded else {
+            reportRecordingStartFailure(
+                action.kind == .dictation
+                    ? "Dictation was canceled because the foreground app changed to an excluded app before recording started."
+                    : "Voice action was canceled because the foreground app changed to an excluded app or its safety settings could not be verified.",
+                action: action
+            )
             return
         }
         dismissOverlayTask?.cancel()
@@ -177,7 +330,11 @@ final class EchoTypeRuntime {
                 ? modelLibrary.installedModelDirectory(
                     forDownloadID: ModelLibraryViewModel.parakeetVocabularyDownloadID
                 )
-                : nil
+                : nil,
+            shouldContinueStarting: { [weak self] in
+                guard let self else { return false }
+                return self.validatePendingRecordingStart(startToken, action: action)
+            }
         )
         guard recordingStartGate.isCurrent(startToken) else {
             if dictation.isRecording {
@@ -189,55 +346,189 @@ final class EchoTypeRuntime {
             return
         }
         if dictation.isRecording {
+            activeRecordingAction = action
             recordingStartedAt = Date()
             recordingEngineID = engineID
+            switch action {
+            case .dictation:
+                break
+            case .voiceMemo:
+                deliveryMessage = "Voice Memo recording — release the shortcut to save."
+            case .rewrite:
+                deliveryMessage = "Voice Rewrite recording — speak the editing instruction, then release."
+            }
+            overlayModel.deliveryMessage = deliveryMessage
             recordingAudioOptions.startRecording()
             recordingFeedback.recordingStarted()
         }
     }
 
-    private func cancelPendingRecordingStart() async -> Bool {
-        guard recordingStartGate.cancelPending() else { return false }
-        if dictation.isRecording {
-            await dictation.cancelAndDiscardRecording()
-            overlayModel.phase = .idle
-            overlayWindow.hide()
+    private func invalidatePendingRecordingStart(
+        for actionKind: RecordingActionKind? = nil
+    ) -> RecordingActionKind? {
+        guard isRecordingStartTaskInFlight,
+              let pendingRecordingActionKind,
+              actionKind == nil || actionKind == pendingRecordingActionKind,
+              recordingStartGate.cancelPending() else {
+            return nil
         }
-        deliveryMessage = "Dictation start canceled because the hotkey was released before setup finished."
+        return pendingRecordingActionKind
+    }
+
+    private func finishCanceledRecordingStart(_ actionKind: RecordingActionKind) {
+        switch actionKind {
+        case .dictation:
+            deliveryMessage = "Dictation start canceled because the hotkey was released before setup finished."
+        case .voiceMemo:
+            showVoiceActionMessage("Voice Memo canceled before recording finished setting up.")
+        case .rewrite:
+            showVoiceActionMessage("Voice Rewrite canceled before recording finished setting up.")
+        }
+    }
+
+    private func cancelPendingRecordingStart(for actionKind: RecordingActionKind? = nil) -> Bool {
+        guard let canceledAction = invalidatePendingRecordingStart(for: actionKind) else { return false }
+        finishCanceledRecordingStart(canceledAction)
         return true
     }
 
-    private func stopOrCancelHotkeyRecording() async {
-        if await cancelPendingRecordingStart() { return }
-        await stopAndDeliverRecording()
+    private func stopOrCancelHotkeyRecording(for actionKind: RecordingActionKind) {
+        let decision = RecordingActionEventPolicy.decision(
+            requestedAction: actionKind,
+            pendingAction: pendingRecordingActionKind,
+            activeAction: activeRecordingAction.kind
+        )
+        switch decision {
+        case .cancelPendingStart:
+            if let canceledAction = invalidatePendingRecordingStart(for: actionKind) {
+                finishCanceledRecordingStart(canceledAction)
+            }
+            return
+        case .ignore:
+            return
+        case .stopActiveRecording:
+            guard !recordingDiscardGate.blocksRecordingEvents else { return }
+            Task { @MainActor [weak self] in
+                await self?.stopAndDeliverRecording()
+            }
+        }
+    }
+
+    private func toggleDictationFromHotkey() async {
+        guard !isDeliveringTranscript,
+              pendingRecordingActionKind == nil || pendingRecordingActionKind == .dictation,
+              !dictation.isRecording || activeRecordingAction.kind == .dictation else {
+            return
+        }
+        await toggleRecording()
     }
 
     func toggleRecording() async {
+        guard !recordingDiscardGate.blocksRecordingEvents,
+              DictationTogglePolicy.canToggleDictation(
+                  isRecording: dictation.isRecording,
+                  activeRecordingIsDictation: activeRecordingAction.kind == .dictation,
+                  hasPendingRecordingStart: pendingRecordingActionKind != nil,
+                  pendingRecordingStartIsDictation: pendingRecordingActionKind == .dictation
+              ) else { return }
         if dictation.isRecording {
-            if await cancelPendingRecordingStart() { return }
+            if cancelPendingRecordingStart(for: .dictation) { return }
             await stopAndDeliverRecording()
             return
         }
-        if await cancelPendingRecordingStart() { return }
+        if cancelPendingRecordingStart(for: .dictation) { return }
         guard !dictation.isTranscribing else { return }
         await startRecording()
     }
 
     func stopAndDeliverRecording() async {
-        guard dictation.isRecording else { return }
-        if textInsertion.isFrontmostAppExcluded() {
+        guard !recordingDiscardGate.blocksRecordingEvents,
+              dictation.isRecording else { return }
+        let action = activeRecordingAction
+        let recordingIsInExcludedApp = action.kind == .dictation
+            ? textInsertion.isFrontmostAppExcluded()
+            : textInsertion.isFrontmostAppExcludedForVoiceAction()
+        if recordingIsInExcludedApp {
+            guard recordingDiscardGate.request() else { return }
             await discardRecordingInExcludedApp()
             recordingStartedAt = nil
             recordingEngineID = nil
             return
         }
-        let insertionTargetAtStop = textInsertion.captureDeliveryTarget()
+        let insertionTargetAtStop: CapturedDeliveryTarget?
+        if case .dictation = action {
+            insertionTargetAtStop = textInsertion.captureDeliveryTarget()
+        } else {
+            insertionTargetAtStop = nil
+        }
         isDeliveringTranscript = true
         overlayModel.phase = .finishing
         overlayWindow.show()
         recordingAudioOptions.stopRecording()
         recordingFeedback.recordingStopped()
-        await dictation.stopAndTranscribe(saveAudio: history.settings.historyEnabled && history.settings.saveAudio)
+        let shouldSaveAudio: Bool
+        if case .dictation = action {
+            shouldSaveAudio = history.settings.historyEnabled && history.settings.saveAudio
+        } else {
+            shouldSaveAudio = false
+        }
+        await dictation.stopAndTranscribe(saveAudio: shouldSaveAudio)
+
+        switch action {
+        case .voiceMemo(let directory):
+            _ = dictation.takeCompletedRecordingAudioData()
+            let memoTimestamp = recordingStartedAt ?? Date()
+            recordingStartedAt = nil
+            recordingEngineID = nil
+            guard !dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                finishVoiceAction(
+                    message: dictation.errorMessage ?? "No speech was recognized; no voice memo was saved.",
+                    displayText: ""
+                )
+                return
+            }
+            do {
+                let noteURL = try VoiceMemoNoteWriter().write(
+                    dictation.transcript,
+                    to: directory,
+                    timestamp: memoTimestamp
+                )
+                finishVoiceAction(message: "Voice memo saved as \(noteURL.lastPathComponent).", displayText: dictation.transcript)
+            } catch {
+                finishVoiceAction(message: "Voice memo could not be saved: \(error.localizedDescription)", displayText: dictation.transcript)
+            }
+            return
+
+        case .rewrite(let selection):
+            _ = dictation.takeCompletedRecordingAudioData()
+            recordingStartedAt = nil
+            recordingEngineID = nil
+            let instruction = dictation.transcript
+            guard !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                finishVoiceAction(
+                    message: dictation.errorMessage ?? "No rewrite instruction was recognized; the selected text was left unchanged.",
+                    displayText: ""
+                )
+                return
+            }
+            guard let rewrittenText = await voiceRewriteService.rewrite(
+                selectedText: selection.snapshot.selectedText,
+                instruction: instruction
+            ) else {
+                finishVoiceAction(
+                    message: "Rewrite canceled: on-device Apple Intelligence is unavailable or did not return a valid result. The selected text was left unchanged.",
+                    displayText: instruction
+                )
+                return
+            }
+            let replacement = await textInsertion.replaceSelectedText(with: rewrittenText, captured: selection)
+            finishVoiceAction(message: Self.message(for: replacement), displayText: rewrittenText)
+            return
+
+        case .dictation:
+            break
+        }
+
         let transcriptAfterCleanup = await textCleanup.cleanedText(
             dictation.transcript,
             targetBundleIdentifier: insertionTargetAtStop?.snapshot.bundleIdentifier
@@ -270,13 +561,9 @@ final class EchoTypeRuntime {
         let report = await textInsertion.deliver(
             finalTranscript,
             capturedTarget: insertionTargetAtStop,
-            copyToClipboard: UserDefaults.standard.bool(forKey: "EchoType.copyToClipboard"),
             autoSend: UserDefaults.standard.bool(forKey: "EchoType.autoSend")
         )
-        let pasteSummary = Self.message(for: report.outcome)
-        deliveryMessage = report.clipboardRestorationWarning.map {
-            "\(pasteSummary) \($0)"
-        } ?? pasteSummary
+        deliveryMessage = Self.message(for: report.outcome)
         deliveryDebugInfo = report.debugInfo
         overlayModel.deliveryMessage = report.needsDeliveryNotice ? deliveryMessage : nil
         overlayModel.deliveryDebugInfo = report.needsDeliveryNotice ? report.debugInfo : nil
@@ -284,17 +571,112 @@ final class EchoTypeRuntime {
         synchronizeOverlay(with: dictation)
     }
 
+    private func validatePendingRecordingStart(
+        _ startToken: UInt64,
+        action: ActiveRecordingAction
+    ) -> Bool {
+        let startIsCurrent = recordingStartGate.isCurrent(startToken)
+        let targetIsExcluded = action.kind == .dictation
+            ? textInsertion.isFrontmostAppExcluded()
+            : textInsertion.isFrontmostAppExcludedForVoiceAction()
+        guard RecordingCaptureStartPolicy.canCapture(
+            startIsCurrent: startIsCurrent,
+            targetIsExcluded: targetIsExcluded
+        ) else {
+            guard startIsCurrent, targetIsExcluded else { return false }
+            _ = recordingStartGate.cancelPending()
+            reportRecordingStartFailure(
+                action.kind == .dictation
+                    ? "Dictation was canceled because the foreground app changed to an excluded app before audio capture began."
+                    : "Voice action was canceled because the foreground app changed to an excluded app or its safety settings could not be verified before audio capture began.",
+                action: action
+            )
+            return false
+        }
+        return true
+    }
+
+    private func reportRecordingStartFailure(_ message: String, action: ActiveRecordingAction) {
+        dictation.errorMessage = message
+        if action.kind != .dictation {
+            showVoiceActionMessage(message)
+        }
+    }
+
+    private func showVoiceActionMessage(_ message: String) {
+        finalTranscriptOverride = nil
+        deliveryMessage = message
+        deliveryDebugInfo = nil
+        overlayModel.transcript = ""
+        overlayModel.phase = .done
+        overlayModel.deliveryMessage = message
+        overlayModel.deliveryDebugInfo = nil
+        overlayWindow.show()
+        dismissOverlayTask?.cancel()
+        dismissOverlayTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            self?.overlayWindow.hide()
+        }
+    }
+
+    private func finishVoiceAction(message: String, displayText: String) {
+        activeRecordingAction = .dictation
+        recordingStartedAt = nil
+        recordingEngineID = nil
+        finalTranscriptOverride = displayText
+        deliveryMessage = message
+        deliveryDebugInfo = nil
+        overlayModel.transcript = displayText
+        overlayModel.deliveryMessage = message
+        overlayModel.deliveryDebugInfo = nil
+        isDeliveringTranscript = false
+        if displayText.isEmpty {
+            overlayModel.phase = .done
+            overlayWindow.show()
+            dismissOverlayTask?.cancel()
+            dismissOverlayTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                self?.overlayWindow.hide()
+            }
+        } else {
+            synchronizeOverlay(with: dictation)
+        }
+    }
+
     private func discardRecordingInExcludedApp() async {
+        guard recordingDiscardGate.beginCleanup() else { return }
+        guard dictation.isRecording else {
+            recordingDiscardGate.finishCleanup()
+            return
+        }
+        defer { recordingDiscardGate.finishCleanup() }
+        let action = activeRecordingAction
         recordingAudioOptions.stopRecording()
         recordingFeedback.recordingStopped()
-        let target = textInsertion.captureDeliveryTarget()
+        let target: CapturedDeliveryTarget?
+        if case .dictation = action {
+            target = textInsertion.captureDeliveryTarget()
+        } else {
+            target = nil
+        }
         await dictation.cancelAndDiscardRecording()
         recordingStartedAt = nil
         recordingEngineID = nil
-        deliveryMessage = "Not pasted: dictation was discarded because an excluded app became active."
-        let appName = target?.snapshot.applicationName ?? "Unknown"
-        let focusType = target?.focusedElementType ?? "Unavailable (no frontmost application)"
-        deliveryDebugInfo = "Frontmost app: \(appName)\nFocused element type: \(focusType)\nPaste skipped: Dictation was discarded before transcription because an excluded app became active."
+        activeRecordingAction = .dictation
+        if case .dictation = action {
+            deliveryMessage = "Not inserted: dictation was discarded because an excluded app became active."
+            let appName = target?.snapshot.applicationName ?? "Unknown"
+            let focusType = target?.focusedElementType ?? "Unavailable (no frontmost application)"
+            deliveryDebugInfo = "Frontmost app: \(appName)\nFocused element type: \(focusType)\nInsertion skipped: Dictation was discarded before transcription because an excluded app became active."
+        } else if case .voiceMemo = action {
+            deliveryMessage = "Voice memo canceled because an excluded app became active; no note was saved."
+            deliveryDebugInfo = nil
+        } else {
+            deliveryMessage = "Voice rewrite canceled because an excluded app became active; the selected text was left unchanged."
+            deliveryDebugInfo = nil
+        }
         overlayModel.phase = .done
         overlayModel.deliveryMessage = deliveryMessage
         overlayModel.deliveryDebugInfo = deliveryDebugInfo
@@ -334,24 +716,64 @@ final class EchoTypeRuntime {
         }
     }
 
+    private static func message(for decision: RewriteSelectionDecision) -> String {
+        switch decision {
+        case .allowed:
+            "Select text before using Voice Rewrite."
+        case .noSelection:
+            "Voice Rewrite needs selected text in the frontmost text field."
+        case .unsupportedField:
+            "Voice Rewrite could not verify an eligible text field. The selected text was not read or changed."
+        case .secureField:
+            "Voice Rewrite is unavailable in secure fields."
+        case .excludedApplication:
+            "Voice Rewrite is unavailable while an excluded app is frontmost."
+        case .policyUnavailable:
+            "Voice Rewrite is paused because EchoType could not verify the excluded-app settings. Reopen Settings and try again."
+        case .invalidRange:
+            "Voice Rewrite could not verify the selected text range; nothing was changed."
+        case .selectionTooLarge:
+            "The selected text is too long for Voice Rewrite. Nothing was changed."
+        }
+    }
+
+    private static func message(for outcome: RewriteSelectionReplacementOutcome) -> String {
+        switch outcome {
+        case .replacedByAccessibility:
+            "The original selection was replaced with the on-device rewrite."
+        case .insertedByKeyboardEvents:
+            "Unicode text input was sent to the verified original selection; EchoType cannot confirm whether the app accepted it."
+        case .selectionChanged:
+            "Rewrite canceled because the selected text, field, or app changed. The original selection was left alone."
+        case .targetUnavailable:
+            "Rewrite canceled because the original text field is no longer available."
+        case .failed:
+            "Rewrite could not be applied. The original selection was left alone."
+        }
+    }
+
     private static func message(for outcome: TextInsertionService.Outcome) -> String {
         switch outcome {
         case .inserted:
-            "Command-V was sent to the verified text field; EchoType cannot confirm whether the app accepted it."
-        case .insertedViaSameApplicationFallback:
-            "Command-V was sent because the same app remained in front; EchoType cannot confirm whether the app accepted it."
+            "Accessibility inserted text into the verified field."
+        case .insertedViaKeyboardEvents:
+            "Unicode text input was sent to the same foreground app; EchoType cannot confirm whether the app accepted it."
         case .insertedAndSubmitted:
-            "Command-V and Return were sent to the verified text field; EchoType cannot confirm whether the app accepted them."
-        case .copyOnly(.targetUnavailable):
-            "Not pasted: EchoType could not verify the foreground app when dictation stopped and text was ready. Use Copy in the transcript."
-        case .copyOnly(.targetChanged):
-            "Not pasted: the foreground app changed before the text was ready. Use Copy in the transcript."
-        case .copyOnly(.excludedApplication):
-            "Not pasted in an excluded application."
-        case .copyOnly(.secureField):
-            "Not pasted: the focused control is marked as a secure field. Use Copy only if you intend to place the transcript there."
+            "Text was inserted into the verified field and Return was sent."
+        case .blocked(.targetUnavailable):
+            "Not inserted: EchoType could not verify the foreground app when dictation stopped and text was ready. Use Copy in the transcript only if needed."
+        case .blocked(.targetChanged):
+            "Not inserted: the foreground app changed before the text was ready. Use Copy in the transcript only if needed."
+        case .blocked(.excludedApplication):
+            "Not inserted in an excluded application."
+        case .blocked(.secureField):
+            "Not inserted: the focused control is marked as a secure field."
+        case .blocked(.unsupportedField):
+            "Not inserted: EchoType could not verify that the focused control is a text field."
+        case .blocked(.policyUnavailable):
+            "Not inserted: EchoType could not verify the app identity or excluded-app policy."
         case .failed:
-            "Text could not be pasted. The transcript remains available in EchoType."
+            "Text could not be inserted. The transcript remains available in EchoType."
         }
     }
 }

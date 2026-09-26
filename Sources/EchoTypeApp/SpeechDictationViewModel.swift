@@ -170,13 +170,18 @@ final class SpeechDictationViewModel {
         modelDirectory: URL?,
         languageIdentifier: String,
         vocabularyTerms: [String] = [],
-        ctcVocabularyDirectory: URL? = nil
+        ctcVocabularyDirectory: URL? = nil,
+        shouldContinueStarting: @MainActor () -> Bool = { true }
     ) async {
         completedRecordingAudioData = nil
         recordingVocabularyTerms = vocabularyTerms
+        guard shouldContinueStarting() else { return }
         switch backend {
         case .appleSpeech:
-            await startAppleSpeechRecording(languageIdentifier: languageIdentifier)
+            await startAppleSpeechRecording(
+                languageIdentifier: languageIdentifier,
+                shouldContinueStarting: shouldContinueStarting
+            )
             if isRecording {
                 recordingBackend = .appleSpeech
                 recordingLanguageIdentifier = languageIdentifier
@@ -186,7 +191,10 @@ final class SpeechDictationViewModel {
                 errorMessage = "The selected model is not installed. Download it from Speech Models, then try again."
                 return
             }
-            await startAudioOnlyRecording(previewEnabled: backend == .parakeetV3)
+            await startAudioOnlyRecording(
+                previewEnabled: backend == .parakeetV3,
+                shouldContinueStarting: shouldContinueStarting
+            )
             if isRecording {
                 recordingBackend = backend
                 recordingModelDirectory = modelDirectory
@@ -202,23 +210,33 @@ final class SpeechDictationViewModel {
         }
     }
 
-    private func startAppleSpeechRecording(languageIdentifier: String) async {
-        guard !isRecording, !isTranscribing else { return }
+    private func startAppleSpeechRecording(
+        languageIdentifier: String,
+        shouldContinueStarting: @MainActor () -> Bool
+    ) async {
+        guard !isRecording, !isTranscribing, shouldContinueStarting() else { return }
         guard isAppleSpeechPrepared(for: languageIdentifier) else {
             errorMessage = "Apple Speech assets for this language aren't installed yet. Choose Prepare Apple Speech in the Dictation panel, then use the hotkey again."
             return
         }
         errorMessage = nil
 
-        guard await microphoneAccessGranted() else {
+        let hasMicrophoneAccess = await microphoneAccessGranted()
+        guard shouldContinueStarting() else { return }
+        guard hasMicrophoneAccess else {
             errorMessage = "Microphone access is off. Allow EchoType in System Settings → Privacy & Security → Microphone."
             return
         }
 
-        guard let preparedLocaleIdentifier,
-              let locale = await DictationTranscriber.supportedLocale(
-                equivalentTo: Locale(identifier: preparedLocaleIdentifier)
-              ) else {
+        guard let preparedLocaleIdentifier else {
+            errorMessage = "Apple Speech no longer reports installed assets for this language. Check the Dictation panel and choose Prepare Apple Speech, then use the hotkey again."
+            return
+        }
+        let locale = await DictationTranscriber.supportedLocale(
+            equivalentTo: Locale(identifier: preparedLocaleIdentifier)
+        )
+        guard shouldContinueStarting() else { return }
+        guard let locale else {
             errorMessage = "Apple Speech no longer reports installed assets for this language. Check the Dictation panel and choose Prepare Apple Speech, then use the hotkey again."
             return
         }
@@ -239,10 +257,12 @@ final class SpeechDictationViewModel {
         }
 
         let liveTranscriber = DictationTranscriber(locale: locale, preset: .progressiveLongDictation)
-        guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
+        let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
             compatibleWith: [liveTranscriber],
             considering: inputFormat
-        ) else {
+        )
+        guard shouldContinueStarting() else { return }
+        guard let analyzerFormat else {
             errorMessage = "Apple Speech could not choose an audio format for this microphone."
             return
         }
@@ -278,7 +298,21 @@ final class SpeechDictationViewModel {
             if let context = AppleSpeechTranscriber.analysisContext(for: recordingVocabularyTerms) {
                 try await analyzer.setContext(context)
             }
+            guard shouldContinueStarting() else {
+                continuation.finish()
+                await analyzer.cancelAndFinishNow()
+                resultsTask.cancel()
+                try? FileManager.default.removeItem(at: url)
+                return
+            }
             try await analyzer.start(inputSequence: inputSequence)
+            guard shouldContinueStarting() else {
+                continuation.finish()
+                await analyzer.cancelAndFinishNow()
+                resultsTask.cancel()
+                try? FileManager.default.removeItem(at: url)
+                return
+            }
             let tapHandler = AudioTapHandlerFactory.make { buffer in
                 writer.write(buffer)
                 bridge.append(buffer)
@@ -291,6 +325,23 @@ final class SpeechDictationViewModel {
             )
             tapInstalled = true
             engine.prepare()
+            let microphoneAuthorized = Self.microphoneAuthorizationIsCurrentlyGranted()
+            guard RecordingCaptureStartPolicy.canStartEngine(
+                startIsCurrent: shouldContinueStarting(),
+                microphoneAuthorized: microphoneAuthorized
+            ) else {
+                inputNode.removeTap(onBus: 0)
+                tapInstalled = false
+                engine.stop()
+                continuation.finish()
+                await analyzer.cancelAndFinishNow()
+                resultsTask.cancel()
+                try? FileManager.default.removeItem(at: url)
+                if !microphoneAuthorized {
+                    errorMessage = "Microphone access was revoked before recording started. Allow EchoType in System Settings → Privacy & Security → Microphone."
+                }
+                return
+            }
             try engine.start()
 
             audioEngine = engine
@@ -313,15 +364,22 @@ final class SpeechDictationViewModel {
             await analyzer.cancelAndFinishNow()
             resultsTask.cancel()
             try? FileManager.default.removeItem(at: url)
-            errorMessage = error.localizedDescription
+            if shouldContinueStarting() {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
-    private func startAudioOnlyRecording(previewEnabled: Bool) async {
-        guard !isPreparingAssets, !isRecording, !isTranscribing else { return }
+    private func startAudioOnlyRecording(
+        previewEnabled: Bool,
+        shouldContinueStarting: @MainActor () -> Bool
+    ) async {
+        guard !isPreparingAssets, !isRecording, !isTranscribing, shouldContinueStarting() else { return }
         errorMessage = nil
 
-        guard await microphoneAccessGranted() else {
+        let hasMicrophoneAccess = await microphoneAccessGranted()
+        guard shouldContinueStarting() else { return }
+        guard hasMicrophoneAccess else {
             errorMessage = "Microphone access is off. Allow EchoType in System Settings → Privacy & Security → Microphone."
             return
         }
@@ -359,6 +417,20 @@ final class SpeechDictationViewModel {
             )
             tapInstalled = true
             engine.prepare()
+            let microphoneAuthorized = Self.microphoneAuthorizationIsCurrentlyGranted()
+            guard RecordingCaptureStartPolicy.canStartEngine(
+                startIsCurrent: shouldContinueStarting(),
+                microphoneAuthorized: microphoneAuthorized
+            ) else {
+                inputNode.removeTap(onBus: 0)
+                tapInstalled = false
+                engine.stop()
+                try? FileManager.default.removeItem(at: url)
+                if !microphoneAuthorized {
+                    errorMessage = "Microphone access was revoked before recording started. Allow EchoType in System Settings → Privacy & Security → Microphone."
+                }
+                return
+            }
             try engine.start()
 
             audioEngine = engine
@@ -543,6 +615,10 @@ final class SpeechDictationViewModel {
         recordingLanguageIdentifier = nil
         recordingVocabularyTerms = []
         onChange?(self)
+    }
+
+    private static func microphoneAuthorizationIsCurrentlyGranted() -> Bool {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     }
 
     private func microphoneAccessGranted() async -> Bool {

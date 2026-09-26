@@ -30,3 +30,13 @@ public struct RecordingStartGate: Sendable {
         activeGeneration = nil
     }
 }
+
+public enum RecordingCaptureStartPolicy {
+    public static func canCapture(startIsCurrent: Bool, targetIsExcluded: Bool) -> Bool {
+        startIsCurrent && !targetIsExcluded
+    }
+
+    public static func canStartEngine(startIsCurrent: Bool, microphoneAuthorized: Bool) -> Bool {
+        startIsCurrent && microphoneAuthorized
+    }
+}

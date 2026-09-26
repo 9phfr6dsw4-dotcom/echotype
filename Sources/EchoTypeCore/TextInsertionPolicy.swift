@@ -27,23 +27,20 @@ public struct TextInsertionDiagnostic: Equatable, Sendable {
     public let appWhenTextWasReady: String
     public let focusedElementAtStop: String
     public let focusedElementWhenReady: String
-    public let pasteResult: String
-    public let clipboardRestorationWarning: String?
+    public let insertionResult: String
 
     public init(
         appAtDictationStop: String,
         appWhenTextWasReady: String,
         focusedElementAtStop: String,
         focusedElementWhenReady: String,
-        pasteResult: String,
-        clipboardRestorationWarning: String? = nil
+        insertionResult: String
     ) {
         self.appAtDictationStop = appAtDictationStop
         self.appWhenTextWasReady = appWhenTextWasReady
         self.focusedElementAtStop = focusedElementAtStop
         self.focusedElementWhenReady = focusedElementWhenReady
-        self.pasteResult = pasteResult
-        self.clipboardRestorationWarning = clipboardRestorationWarning
+        self.insertionResult = insertionResult
     }
 
     public var description: String {
@@ -52,11 +49,8 @@ public struct TextInsertionDiagnostic: Equatable, Sendable {
             "App when text was ready: \(appWhenTextWasReady)",
             "Focused element at stop: \(focusedElementAtStop)",
             "Focused element when ready: \(focusedElementWhenReady)",
-            "Paste result: \(pasteResult)"
+            "Insertion result: \(insertionResult)"
         ]
-        if let clipboardRestorationWarning {
-            lines.append("Clipboard: \(clipboardRestorationWarning)")
-        }
         return lines.joined(separator: "\n")
     }
 }
@@ -66,12 +60,14 @@ public enum TextInsertionBlockReason: Equatable, Sendable {
     case targetChanged
     case excludedApplication
     case secureField
+    case unsupportedField
+    case policyUnavailable
 }
 
 public enum TextInsertionDecision: Equatable, Sendable {
     case insert
-    case pasteInSameApplication
-    case copyOnly(TextInsertionBlockReason)
+    case keyboardEventFallback
+    case blocked(TextInsertionBlockReason)
 }
 
 public struct TextInsertionPolicy: Sendable {
@@ -95,28 +91,39 @@ public struct TextInsertionPolicy: Sendable {
         return excludedBundleIdentifiers.contains(bundleIdentifier.lowercased())
     }
 
+    public static func canSubmitAfterInsertion(
+        autoSendEnabled: Bool,
+        insertionConfirmedByAccessibility: Bool
+    ) -> Bool {
+        autoSendEnabled && insertionConfirmedByAccessibility
+    }
+
     public func decision(
         captured: TextInsertionSnapshot?,
         current: TextInsertionSnapshot?,
         sameFocusedElement: Bool
     ) -> TextInsertionDecision {
-        guard let captured, let current else { return .copyOnly(.targetUnavailable) }
-        guard !isExcluded(bundleIdentifier: captured.bundleIdentifier),
-              !isExcluded(bundleIdentifier: current.bundleIdentifier) else {
-            return .copyOnly(.excludedApplication)
+        guard let captured, let current else { return .blocked(.targetUnavailable) }
+        guard let capturedBundleIdentifier = captured.bundleIdentifier,
+              !capturedBundleIdentifier.isEmpty,
+              let currentBundleIdentifier = current.bundleIdentifier,
+              !currentBundleIdentifier.isEmpty else {
+            return .blocked(.policyUnavailable)
+        }
+        guard !isExcluded(bundleIdentifier: capturedBundleIdentifier),
+              !isExcluded(bundleIdentifier: currentBundleIdentifier) else {
+            return .blocked(.excludedApplication)
         }
         guard sameApplication(captured, current) else {
-            return .copyOnly(.targetChanged)
+            return .blocked(.targetChanged)
         }
         guard !isSecureField(captured), !isSecureField(current) else {
-            return .copyOnly(.secureField)
+            return .blocked(.secureField)
         }
-        if sameFocusedElement,
-           let role = current.focusedRole,
-           textInputRoles.contains(role) {
-            return .insert
+        guard let role = current.focusedRole, textInputRoles.contains(role) else {
+            return .blocked(.unsupportedField)
         }
-        return .pasteInSameApplication
+        return sameFocusedElement ? .insert : .keyboardEventFallback
     }
 
     private func isSecureField(_ snapshot: TextInsertionSnapshot) -> Bool {

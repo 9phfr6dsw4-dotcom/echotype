@@ -7,6 +7,7 @@ struct EchoTypeSettingsView: View {
     @Environment(EchoTypeRuntime.self) private var runtime
     @Environment(\.scenePhase) private var scenePhase
     @State private var showingClearConfirmation = false
+    @State private var voiceActionShortcutError: String?
     @AppStorage("EchoType.showLiveWords") private var showLiveWords = true
     @AppStorage(RecordingFeedbackController.dockIconPreferenceKey) private var changeDockIconWhileRecording = false
     @AppStorage(RecordingFeedbackController.soundsPreferenceKey) private var playRecordingSounds = false
@@ -50,6 +51,7 @@ struct EchoTypeSettingsView: View {
                 localLearningSettings
                 customVocabularySettings
                 smartLinkSettings
+                voiceActionsSettings
                 textCleanupSettings
                 recordingBehaviorSettings
                 recordingAudioSettings
@@ -280,7 +282,7 @@ struct EchoTypeSettingsView: View {
                     "Learn corrections made to recent EchoType insertions",
                     isOn: $learnRecentInsertionCorrections
                 )
-                Text("Off by default. When enabled, EchoType watches the same field it just pasted into for up to 10 seconds. It considers only a selected range wholly inside that insertion, waits 800 ms after a value change, and reads only the validated replacement range. It never reads whole-field text, window titles, URLs, secure fields, or excluded apps. If Accessibility range, notification, or target checks are unavailable or ambiguous, nothing is learned. Accepted one-word corrections use the existing local-learning rule and need at least three repeats.")
+                Text("Off by default. When enabled, EchoType watches the same field it just inserted into for up to 10 seconds. It considers only a selected range wholly inside that insertion, waits 800 ms after a value change, and reads only the validated replacement range. It never reads whole-field text, window titles, URLs, secure fields, or excluded apps. If Accessibility range, notification, or target checks are unavailable or ambiguous, nothing is learned. Accepted one-word corrections use the existing local-learning rule and need at least three repeats.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -406,7 +408,7 @@ struct EchoTypeSettingsView: View {
     private var smartLinkSettings: some View {
         GroupBox("Smart links") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Save a phrase and its link. When you say the phrase, EchoType replaces it with the URL in the final transcript before saving and pasting. Matching is case-insensitive and only replaces the complete phrase. This works locally with every speech engine.")
+                Text("Save a phrase and its link. When you say the phrase, EchoType replaces it with the URL in the final transcript before saving or inserting it. Matching is case-insensitive and only replaces the complete phrase. This works locally with every speech engine.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -459,6 +461,102 @@ struct EchoTypeSettingsView: View {
         }
     }
 
+    private var voiceActionsSettings: some View {
+        GroupBox("Voice actions") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("These hold-to-talk shortcuts are separate from Dictation. Hold a shortcut while speaking, then release it to finish that action. Shortcuts also reach the frontmost app, so change a chord if that app already uses it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Voice Memo: \(runtime.hotkey.voiceMemoShortcut.displayLabel ?? "Key \\(runtime.hotkey.voiceMemoShortcut.keyCode)")")
+                        Text("Saves one new Markdown note per recording.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    KeyboardShortcutCaptureButton(title: "Change Voice Memo Hotkey…") { shortcut in
+                        guard runtime.hotkey.chooseVoiceMemoShortcut(shortcut) else {
+                            voiceActionShortcutError = "Choose a chord that differs from Dictation, Rewrite, and the other EchoType hotkeys."
+                            return
+                        }
+                        voiceActionShortcutError = nil
+                    }
+                }
+
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Rewrite: \(runtime.hotkey.rewriteShortcut.displayLabel ?? "Key \\(runtime.hotkey.rewriteShortcut.keyCode)")")
+                        Text("Select text, hold the shortcut, and speak an editing instruction.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    KeyboardShortcutCaptureButton(title: "Change Rewrite Hotkey…") { shortcut in
+                        guard runtime.hotkey.chooseRewriteShortcut(shortcut) else {
+                            voiceActionShortcutError = "Choose a chord that differs from Dictation, Voice Memo, and the other EchoType hotkeys."
+                            return
+                        }
+                        voiceActionShortcutError = nil
+                    }
+                }
+
+                if let message = runtime.hotkey.voiceActionShortcutConflictMessage {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let voiceActionShortcutError {
+                    Label(voiceActionShortcutError, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Divider()
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Voice memo folder")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Button("Choose Folder…") {
+                        runtime.voiceMemoDestination.chooseDirectory()
+                    }
+                }
+                Text(runtime.voiceMemoDestination.selectedDirectoryDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("EchoType saves a separate date-and-time-named .md file in this folder. It does not paste the memo into the frontmost app or add it to transcript history.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let errorMessage = runtime.voiceMemoDestination.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Divider()
+                Text("Voice Rewrite uses Apple Intelligence on this Mac only. It reads only the selected text from eligible fields and replaces it only if the same app, field, selection, and range are still active. Secure fields and excluded apps are blocked. If the on-device model is unavailable or fails, the selection is left unchanged.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(runtime.voiceRewriteAvailabilityMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
+    }
+
     private var textCleanupSettings: some View {
         GroupBox("Text cleanup") {
             VStack(alignment: .leading, spacing: 12) {
@@ -485,7 +583,7 @@ struct EchoTypeSettingsView: View {
                     get: { textCleanup.settings.aiCleanupEnabled },
                     set: { textCleanup.setAIEnabled($0) }
                 ))
-                Text("Optional grammar and punctuation cleanup runs through Apple's on-device Foundation Models framework. EchoType sends no transcript or audio to a server. If Apple Intelligence is unavailable, the request fails, or it takes over 3 seconds, EchoType pastes the original recognized text exactly, without applying these text rules.")
+                Text("Optional grammar and punctuation cleanup runs through Apple's on-device Foundation Models framework. EchoType sends no transcript or audio to a server. If Apple Intelligence is unavailable, the request fails, or it takes over 3 seconds, EchoType inserts the original recognized text exactly, without applying these text rules.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

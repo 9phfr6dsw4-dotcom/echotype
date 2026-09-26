@@ -14,11 +14,11 @@ final class ExcludedApplicationsViewModel {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let data = defaults.data(forKey: Self.defaultsKey),
-           let saved = try? JSONDecoder().decode(ExcludedAppPolicy.self, from: data) {
+        if let saved = ExcludedAppPolicy.resolvePersisted(defaults.data(forKey: Self.defaultsKey)) {
             self.policy = saved
         } else {
             self.policy = ExcludedAppPolicy()
+            self.errorMessage = "Saved excluded-app settings could not be read. Dictation and voice actions will remain blocked until the setting is repaired."
         }
     }
 

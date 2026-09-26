@@ -10,27 +10,27 @@ final class TextInsertionPolicyTests: XCTestCase {
             appWhenTextWasReady: "Claude",
             focusedElementAtStop: "AXTextArea",
             focusedElementWhenReady: "Unavailable (Accessibility API did not expose the focused element)",
-            pasteResult: "The frontmost app changed between dictation stop and paste."
+            insertionResult: "The frontmost app changed between dictation stop and text insertion."
         )
 
         XCTAssertEqual(
             diagnostic.description,
-            "App at dictation stop: ChatGPT\nApp when text was ready: Claude\nFocused element at stop: AXTextArea\nFocused element when ready: Unavailable (Accessibility API did not expose the focused element)\nPaste result: The frontmost app changed between dictation stop and paste."
+            "App at dictation stop: ChatGPT\nApp when text was ready: Claude\nFocused element at stop: AXTextArea\nFocused element when ready: Unavailable (Accessibility API did not expose the focused element)\nInsertion result: The frontmost app changed between dictation stop and text insertion."
         )
     }
 
-    func testDiagnosticReportsClipboardRestorationFailure() {
+    func testDiagnosticDescribesInsertionWithoutClipboardClaims() {
         let diagnostic = TextInsertionDiagnostic(
             appAtDictationStop: "Claude",
             appWhenTextWasReady: "Claude",
-            focusedElementAtStop: "Unavailable (Accessibility API did not expose the focused element)",
-            focusedElementWhenReady: "Unavailable (Accessibility API did not expose the focused element)",
-            pasteResult: "Command-V was sent; app acceptance cannot be confirmed.",
-            clipboardRestorationWarning: "EchoType could not restore the previous clipboard contents."
+            focusedElementAtStop: "AXTextArea",
+            focusedElementWhenReady: "AXTextArea",
+            insertionResult: "Unicode text input was sent; app acceptance cannot be confirmed."
         )
 
-        XCTAssertTrue(diagnostic.description.contains("Clipboard: EchoType could not restore the previous clipboard contents."))
-        XCTAssertTrue(diagnostic.description.contains("Paste result: Command-V was sent; app acceptance cannot be confirmed."))
+        XCTAssertTrue(diagnostic.description.contains("Insertion result: Unicode text input was sent"))
+        XCTAssertFalse(diagnostic.description.localizedCaseInsensitiveContains("clipboard"))
+        XCTAssertFalse(diagnostic.description.contains("Command-V"))
     }
 
     func testVerifiedTextInputUsesAccessibilityInsertion() {
@@ -55,11 +55,11 @@ final class TextInsertionPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             policy.decision(captured: target, current: target, sameFocusedElement: true),
-            .copyOnly(.secureField)
+            .blocked(.secureField)
         )
     }
 
-    func testChangedApplicationFallsBackToCopyButSameAppFocusChangeStillPastes() {
+    func testChangedApplicationIsBlockedButSameAppFocusChangeUsesKeyboardFallback() {
         let captured = TextInsertionSnapshot(
             processIdentifier: 42,
             bundleIdentifier: "com.example.editor",
@@ -76,8 +76,8 @@ final class TextInsertionPolicyTests: XCTestCase {
             focusedRole: "AXTextField"
         )
 
-        XCTAssertEqual(policy.decision(captured: captured, current: differentApp, sameFocusedElement: false), .copyOnly(.targetChanged))
-        XCTAssertEqual(policy.decision(captured: captured, current: sameAppDifferentField, sameFocusedElement: false), .pasteInSameApplication)
+        XCTAssertEqual(policy.decision(captured: captured, current: differentApp, sameFocusedElement: false), .blocked(.targetChanged))
+        XCTAssertEqual(policy.decision(captured: captured, current: sameAppDifferentField, sameFocusedElement: false), .keyboardEventFallback)
     }
 
     func testSameBundleIdentifierRemainsSameAppAcrossProcessChanges() {
@@ -89,13 +89,13 @@ final class TextInsertionPolicyTests: XCTestCase {
         let afterRestart = TextInsertionSnapshot(
             processIdentifier: 84,
             bundleIdentifier: "COM.EXAMPLE.EDITOR",
-            focusedRole: nil
+            focusedRole: "AXTextArea"
         )
 
         XCTAssertTrue(policy.sameApplication(beforeRestart, afterRestart))
         XCTAssertEqual(
             policy.decision(captured: beforeRestart, current: afterRestart, sameFocusedElement: false),
-            .pasteInSameApplication
+            .keyboardEventFallback
         )
     }
 
@@ -108,11 +108,11 @@ final class TextInsertionPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             policy.decision(captured: target, current: target, sameFocusedElement: true),
-            .copyOnly(.excludedApplication)
+            .blocked(.excludedApplication)
         )
     }
 
-    func testUnknownFocusedControlFallsBackToSameAppPaste() {
+    func testUnknownFocusedControlIsBlockedInsteadOfKeyboardFallback() {
         let target = TextInsertionSnapshot(
             processIdentifier: 42,
             bundleIdentifier: "com.example.editor",
@@ -121,11 +121,11 @@ final class TextInsertionPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             policy.decision(captured: target, current: target, sameFocusedElement: false),
-            .pasteInSameApplication
+            .blocked(.unsupportedField)
         )
     }
 
-    func testUnavailableTextFieldFallsBackToPasteWhenAppIsKnown() {
+    func testUnavailableFocusedRoleIsBlockedInsteadOfKeyboardFallback() {
         let target = TextInsertionSnapshot(
             processIdentifier: 42,
             bundleIdentifier: "com.example.editor",
@@ -134,14 +134,42 @@ final class TextInsertionPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             policy.decision(captured: target, current: target, sameFocusedElement: false),
-            .pasteInSameApplication
+            .blocked(.unsupportedField)
         )
     }
 
-    func testUnavailableApplicationFallsBackToCopy() {
+    func testMissingBundleIdentityFailsClosed() {
+        let target = TextInsertionSnapshot(
+            processIdentifier: 42,
+            bundleIdentifier: nil,
+            focusedRole: "AXTextField"
+        )
+
+        XCTAssertEqual(
+            policy.decision(captured: target, current: target, sameFocusedElement: true),
+            .blocked(.policyUnavailable)
+        )
+    }
+
+    func testAutoSendRequiresAccessibilityToConfirmInsertion() {
+        XCTAssertTrue(TextInsertionPolicy.canSubmitAfterInsertion(
+            autoSendEnabled: true,
+            insertionConfirmedByAccessibility: true
+        ))
+        XCTAssertFalse(TextInsertionPolicy.canSubmitAfterInsertion(
+            autoSendEnabled: true,
+            insertionConfirmedByAccessibility: false
+        ))
+        XCTAssertFalse(TextInsertionPolicy.canSubmitAfterInsertion(
+            autoSendEnabled: false,
+            insertionConfirmedByAccessibility: true
+        ))
+    }
+
+    func testUnavailableApplicationIsBlocked() {
         XCTAssertEqual(
             policy.decision(captured: nil, current: nil, sameFocusedElement: false),
-            .copyOnly(.targetUnavailable)
+            .blocked(.targetUnavailable)
         )
     }
 
@@ -155,7 +183,7 @@ final class TextInsertionPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             policy.decision(captured: target, current: target, sameFocusedElement: true),
-            .copyOnly(.secureField)
+            .blocked(.secureField)
         )
     }
 }

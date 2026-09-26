@@ -2,6 +2,25 @@ import XCTest
 @testable import EchoTypeCore
 
 final class ExcludedAppPolicyTests: XCTestCase {
+    func testMissingPersistedPolicyUsesBuiltInDefaults() {
+        let policy = try! XCTUnwrap(ExcludedAppPolicy.resolvePersisted(nil))
+        XCTAssertTrue(policy.isExcluded(bundleIdentifier: "com.1password.1password"))
+    }
+
+    func testMalformedOrIncompletePersistedPolicyFailsClosed() {
+        XCTAssertNil(ExcludedAppPolicy.resolvePersisted(Data("not-json".utf8)))
+        XCTAssertNil(ExcludedAppPolicy.resolvePersisted(Data("{}".utf8)))
+    }
+
+    func testValidPersistedPolicyKeepsUserExclusions() throws {
+        var policy = ExcludedAppPolicy()
+        policy.addUserExclusion(bundleIdentifier: "com.acme.vault", displayName: "Acme Vault")
+        let data = try JSONEncoder().encode(policy)
+
+        let resolved = try XCTUnwrap(ExcludedAppPolicy.resolvePersisted(data))
+        XCTAssertTrue(resolved.isExcluded(bundleIdentifier: "com.acme.vault"))
+    }
+
     func testDefaultsExcludeCommonPasswordManagers() {
         let policy = ExcludedAppPolicy()
 

@@ -6,10 +6,9 @@ struct SpeechDictationPanel: View {
     @Environment(EchoTypeRuntime.self) private var runtime
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("EchoType.showLiveWords") private var showLiveWords = true
-    @AppStorage("EchoType.copyToClipboard") private var copyToClipboard = false
     @AppStorage("EchoType.autoSend") private var autoSend = false
     @State private var shortcutCaptureError: String?
-    @State private var showingPasteDebugInfo = false
+    @State private var showingInsertionDebugInfo = false
 
     private var dictation: SpeechDictationViewModel { runtime.dictation }
 
@@ -71,7 +70,7 @@ struct SpeechDictationPanel: View {
                 }
 
                 if let deliveryDebugInfo = runtime.deliveryDebugInfo {
-                    DisclosureGroup("Paste debug info", isExpanded: $showingPasteDebugInfo) {
+                    DisclosureGroup("Insertion debug info", isExpanded: $showingInsertionDebugInfo) {
                         Text(deliveryDebugInfo)
                             .font(.system(.caption2, design: .monospaced))
                             .textSelection(.enabled)
@@ -199,12 +198,13 @@ struct SpeechDictationPanel: View {
 
                 Toggle("Show live words in the recording overlay", isOn: $showLiveWords)
                     .font(.caption)
-                Toggle("Copy final text to clipboard and keep it there", isOn: $copyToClipboard)
-                    .font(.caption)
+                Text("Dictation and Voice Rewrite insert text without using the clipboard. Use Copy only when you explicitly want to copy a transcript.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 Toggle("Press Return after inserting text", isOn: $autoSend)
                     .font(.caption)
                 if autoSend {
-                    Text("Auto-send can submit a message or form in the target app.")
+                    Text("Auto-send can submit a message or form in the target app. Return is sent only when Accessibility confirms the insertion; the keyboard-event fallback never submits automatically.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

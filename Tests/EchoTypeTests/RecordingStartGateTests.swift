@@ -17,6 +17,36 @@ final class RecordingStartGateTests: XCTestCase {
         XCTAssertTrue(gate.isCurrent(second))
     }
 
+    func testCaptureRequiresCurrentStartAndNonExcludedForeground() {
+        XCTAssertTrue(RecordingCaptureStartPolicy.canCapture(
+            startIsCurrent: true,
+            targetIsExcluded: false
+        ))
+        XCTAssertFalse(RecordingCaptureStartPolicy.canCapture(
+            startIsCurrent: false,
+            targetIsExcluded: false
+        ))
+        XCTAssertFalse(RecordingCaptureStartPolicy.canCapture(
+            startIsCurrent: true,
+            targetIsExcluded: true
+        ))
+    }
+
+    func testEngineStartRequiresCurrentRequestAndCurrentMicrophoneAuthorization() {
+        XCTAssertTrue(RecordingCaptureStartPolicy.canStartEngine(
+            startIsCurrent: true,
+            microphoneAuthorized: true
+        ))
+        XCTAssertFalse(RecordingCaptureStartPolicy.canStartEngine(
+            startIsCurrent: false,
+            microphoneAuthorized: true
+        ))
+        XCTAssertFalse(RecordingCaptureStartPolicy.canStartEngine(
+            startIsCurrent: true,
+            microphoneAuthorized: false
+        ))
+    }
+
     func testCancelDoesNothingWhenNoStartIsPending() {
         var gate = RecordingStartGate()
         XCTAssertFalse(gate.cancelPending())
