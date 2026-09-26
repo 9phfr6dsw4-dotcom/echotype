@@ -94,6 +94,11 @@ final class GlobalHotkeyController {
     @ObservationIgnored private var rewriteShortcutRecognizer: KeyboardShortcutRecognizer?
     @ObservationIgnored private var isHoldRecordingActive = false
     @ObservationIgnored private var latchedVoiceAction: RecordingActionKind?
+    @ObservationIgnored private let systemHotKeys = SystemHotKeyCenter()
+    @ObservationIgnored private var isShortcutCaptureActive = false
+    @ObservationIgnored private var shortcutCaptureObservers: [NSObjectProtocol] = []
+    private static let voiceMemoHotKeyID: UInt32 = 1
+    private static let rewriteHotKeyID: UInt32 = 2
     @ObservationIgnored private var lastKeyboardEventDescription: String?
     @ObservationIgnored private var lastRecognizedAction: String?
     @ObservationIgnored private let defaults: UserDefaults
@@ -151,6 +156,27 @@ final class GlobalHotkeyController {
             ?? Self.defaultRewriteShortcut
 
         resetRecognizers()
+        observeShortcutCapture()
+    }
+
+    /// Voice chords are registered as system hotkeys, which would swallow them while Settings is
+    /// capturing a new shortcut, so they are released for the duration of a capture.
+    private func observeShortcutCapture() {
+        let center = NotificationCenter.default
+        shortcutCaptureObservers = [
+            center.addObserver(forName: .echoTypeShortcutCaptureDidBegin, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.setShortcutCaptureActive(true) }
+            },
+            center.addObserver(forName: .echoTypeShortcutCaptureDidEnd, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.setShortcutCaptureActive(false) }
+            }
+        ]
+    }
+
+    private func setShortcutCaptureActive(_ active: Bool) {
+        guard isShortcutCaptureActive != active else { return }
+        isShortcutCaptureActive = active
+        refreshVoiceActionHotKeys()
     }
 
     var selectedKeyName: String {
@@ -363,6 +389,7 @@ final class GlobalHotkeyController {
             return
         }
         isEnabled = true
+        refreshVoiceActionHotKeys()
         refreshStatusMessage()
     }
 
@@ -378,6 +405,7 @@ final class GlobalHotkeyController {
     }
 
     private func removeMonitors() {
+        systemHotKeys.unregisterAll()
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
         globalMonitor = nil
@@ -482,17 +510,53 @@ final class GlobalHotkeyController {
 
     private func resetVoiceActionRecognizers() {
         stopActiveVoiceActionsIfNeeded()
-        voiceMemoShortcutRecognizer = KeyboardShortcutConflictPolicy.conflicts(
+        refreshVoiceActionHotKeys()
+    }
+
+    /// Registers each conflict-free voice chord as a system hotkey so the frontmost app never
+    /// receives it. If registration is unavailable (listener off, a Settings capture in progress,
+    /// an fn chord, or a chord owned by another app), the chord falls back to the passive
+    /// keyboard listener, which still works but lets the frontmost app see the keystroke.
+    private func refreshVoiceActionHotKeys() {
+        systemHotKeys.unregisterAll()
+        let voiceMemoAvailable = !KeyboardShortcutConflictPolicy.conflicts(
             voiceMemoShortcut,
             with: [selectedShortcut, backupShortcut, rewriteShortcut],
             reservedModifierFlags: selectedModifierFlags
-        ) ? nil : KeyboardShortcutRecognizer(primary: voiceMemoShortcut, mode: .holdToTalk)
-        rewriteShortcutRecognizer = KeyboardShortcutConflictPolicy.conflicts(
+        )
+        let rewriteAvailable = !KeyboardShortcutConflictPolicy.conflicts(
             rewriteShortcut,
             with: [selectedShortcut, backupShortcut, voiceMemoShortcut],
             reservedModifierFlags: selectedModifierFlags
-        ) ? nil : KeyboardShortcutRecognizer(primary: rewriteShortcut, mode: .holdToTalk)
+        )
+        let canRegister = isEnabled && !isShortcutCaptureActive
+        let voiceMemoRegistered = voiceMemoAvailable && canRegister && systemHotKeys.register(
+            id: Self.voiceMemoHotKeyID,
+            shortcut: voiceMemoShortcut
+        ) { [weak self] in
+            self?.handleSystemVoiceHotKeyPress(.voiceMemo)
+        }
+        let rewriteRegistered = rewriteAvailable && canRegister && systemHotKeys.register(
+            id: Self.rewriteHotKeyID,
+            shortcut: rewriteShortcut
+        ) { [weak self] in
+            self?.handleSystemVoiceHotKeyPress(.rewrite)
+        }
+        voiceMemoShortcutRecognizer = voiceMemoAvailable && !voiceMemoRegistered
+            ? KeyboardShortcutRecognizer(primary: voiceMemoShortcut, mode: .holdToTalk)
+            : nil
+        rewriteShortcutRecognizer = rewriteAvailable && !rewriteRegistered
+            ? KeyboardShortcutRecognizer(primary: rewriteShortcut, mode: .holdToTalk)
+            : nil
         refreshStatusMessage()
+    }
+
+    private func handleSystemVoiceHotKeyPress(_ kind: RecordingActionKind) {
+        guard isEnabled else { return }
+        receivedKeyboardEventCount += 1
+        lastKeyboardEventDescription = kind == .voiceMemo ? "Voice Memo hotkey" : "Voice Rewrite hotkey"
+        lastRecognizedAction = nil
+        handleVoiceChordPress(kind)
     }
 
     private func stopActiveHoldIfNeeded() {
@@ -521,6 +585,10 @@ final class GlobalHotkeyController {
     private func dispatchVoiceChord(_ action: ModifierHotkeyAction?, for kind: RecordingActionKind) {
         // The hold-to-talk recognizer reports a fresh press as .startRecording; releases are ignored.
         guard case .startRecording = action else { return }
+        handleVoiceChordPress(kind)
+    }
+
+    private func handleVoiceChordPress(_ kind: RecordingActionKind) {
         switch VoiceActionLatchPolicy.voiceChordPressed(kind, latched: validatedLatchedVoiceAction()) {
         case let .start(kind):
             startLatchedVoiceAction(kind)

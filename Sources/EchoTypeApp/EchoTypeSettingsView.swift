@@ -464,7 +464,7 @@ struct EchoTypeSettingsView: View {
     private var voiceActionsSettings: some View {
         GroupBox("Voice actions") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("These shortcuts are separate from Dictation. Press a shortcut once to start recording; it keeps recording after you let go. Tap your Dictation hotkey (\(runtime.hotkey.selectedKeyName)) or press the same shortcut again to finish. Shortcuts also reach the frontmost app, so change a chord if that app already uses it.")
+                Text("These shortcuts are separate from Dictation. Press a shortcut once to start recording; it keeps recording after you let go. Tap your Dictation hotkey (\(runtime.hotkey.selectedKeyName)) or press the same shortcut again to finish. While EchoType is running these chords belong to EchoType, so other apps no longer receive them; change a chord if you need it in another app.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

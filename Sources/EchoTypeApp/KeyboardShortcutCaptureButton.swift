@@ -65,14 +65,20 @@ private final class KeyboardShortcutCaptureModel {
             isCapturing = false
             captureLatch = nil
             message = "macOS could not start shortcut capture."
+            return
         }
+        NotificationCenter.default.post(name: .echoTypeShortcutCaptureDidBegin, object: nil)
     }
 
     func cancel() {
+        let wasCapturing = monitor != nil
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         captureLatch = nil
         isCapturing = false
+        if wasCapturing {
+            NotificationCenter.default.post(name: .echoTypeShortcutCaptureDidEnd, object: nil)
+        }
     }
 
     nonisolated private static func descriptor(from event: NSEvent) -> KeyboardShortcutDescriptor? {
@@ -129,6 +135,12 @@ private final class ShortcutCaptureLatch: @unchecked Sendable {
         hasClaimed = true
         return true
     }
+}
+
+extension Notification.Name {
+    /// Posted while Settings listens for a new key chord, so EchoType's own system hotkeys step aside.
+    static let echoTypeShortcutCaptureDidBegin = Notification.Name("EchoType.shortcutCaptureDidBegin")
+    static let echoTypeShortcutCaptureDidEnd = Notification.Name("EchoType.shortcutCaptureDidEnd")
 }
 
 private extension String {
