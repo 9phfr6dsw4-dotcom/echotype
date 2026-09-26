@@ -32,7 +32,7 @@ Speech recognition runs on your Mac. Transcript history, preferences, vocabulary
 <details>
 <summary>Build and test</summary>
 
-The default branch contains the model manifest and integrity tests; the macOS app source is distributed in Releases.
+Build and run the tests from the source in this repository:
 
 ```sh
 swift test
