@@ -15,6 +15,20 @@
 - Review, edit, and copy transcript history stored on your Mac. Customize vocabulary and optional correction learning.
 - Optionally pause Music or Spotify while dictating.
 
+## Screenshots
+
+![EchoFlow Settings for transcript storage, microphone selection, and transcription language.](docs/images/echoflowmicro.png)
+
+*Settings*
+
+![EchoFlow Speech Models screen listing the available transcription engines.](docs/images/Screenshot_2026-09-26_at_2.15.47_PM-1.png)
+
+*Speech Models*
+
+![EchoFlow Home screen with dictation controls and an activity summary.](docs/images/Screenshot_2026-09-26_at_2.15.03_PM-1.png)
+
+*Home*
+
 ## Install
 
 1. Download `EchoFlow.zip` from the [latest release](https://github.com/9phfr6dsw4-dotcom/echoflow/releases/latest) and unzip it.
