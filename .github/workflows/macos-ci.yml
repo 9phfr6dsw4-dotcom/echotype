@@ -16,6 +16,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Verify runner architecture and Xcode SDK
         run: |
           test "$(uname -m)" = "arm64"
