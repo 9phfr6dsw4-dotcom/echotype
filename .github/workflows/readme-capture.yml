@@ -69,6 +69,8 @@ jobs:
             event.post(tap: .cghidEventTap)
             Thread.sleep(forTimeInterval: 0.15)
           }
+          SWIFT
+          swift "$RUNNER_TEMP/scroll.swift"
           sleep 2
           WINDOW_ID="$(swift "$RUNNER_TEMP/capture.swift" EchoType)"
           screencapture -x -l "$WINDOW_ID" "$RUNNER_TEMP/readme-images/echotype-window.png"
