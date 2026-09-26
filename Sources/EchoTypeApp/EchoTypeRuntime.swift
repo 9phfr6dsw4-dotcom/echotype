@@ -18,6 +18,8 @@ final class EchoTypeRuntime {
     let textInsertion: TextInsertionService
     let recordingFeedback: RecordingFeedbackController
     let recordingAudioOptions: RecordingAudioOptionsController
+    let smartLinks: SmartLinksViewModel
+    let launchAtLogin: LaunchAtLoginController
 
     var deliveryMessage: String?
     var deliveryDebugInfo: String?
@@ -36,6 +38,7 @@ final class EchoTypeRuntime {
     @ObservationIgnored private var isDeliveringTranscript = false
     @ObservationIgnored private var recordingStartedAt: Date?
     @ObservationIgnored private var recordingEngineID: String?
+    @ObservationIgnored private var finalTranscriptOverride: String?
 
     init() {
         let microphones = MicrophoneSettingsViewModel()
@@ -44,6 +47,8 @@ final class EchoTypeRuntime {
         let history = TranscriptHistoryViewModel()
         let localLearning = LocalLearningViewModel()
         let customVocabulary = CustomVocabularyViewModel()
+        let smartLinks = SmartLinksViewModel()
+        let launchAtLogin = LaunchAtLoginController()
         let excludedApplications = ExcludedApplicationsViewModel()
         let overlayModel = RecordingOverlayModel()
         let recordingFeedback = RecordingFeedbackController()
@@ -58,6 +63,8 @@ final class EchoTypeRuntime {
         self.overlayModel = overlayModel
         self.recordingFeedback = recordingFeedback
         self.recordingAudioOptions = recordingAudioOptions
+        self.smartLinks = smartLinks
+        self.launchAtLogin = launchAtLogin
         self.hotkey = GlobalHotkeyController()
         self.textInsertion = TextInsertionService()
         self.overlayWindow = RecordingOverlayWindowController(model: overlayModel)
@@ -149,6 +156,7 @@ final class EchoTypeRuntime {
             return
         }
         dismissOverlayTask?.cancel()
+        finalTranscriptOverride = nil
         deliveryMessage = nil
         deliveryDebugInfo = nil
         overlayModel.deliveryMessage = nil
@@ -227,13 +235,16 @@ final class EchoTypeRuntime {
         recordingAudioOptions.stopRecording()
         recordingFeedback.recordingStopped()
         await dictation.stopAndTranscribe(saveAudio: history.settings.historyEnabled && history.settings.saveAudio)
+        let finalTranscript = smartLinks.applying(to: dictation.transcript)
+        finalTranscriptOverride = finalTranscript
+        overlayModel.transcript = finalTranscript
         let duration = max(0, Date().timeIntervalSince(recordingStartedAt ?? Date()))
         recordingStartedAt = nil
         let audioData = dictation.takeCompletedRecordingAudioData()
-        if !dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if !finalTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             do {
                 try history.saveTranscript(
-                    dictation.transcript,
+                    finalTranscript,
                     duration: duration,
                     modelID: recordingEngineID ?? modelLibrary.selectedEngineID,
                     audioData: audioData
@@ -243,14 +254,14 @@ final class EchoTypeRuntime {
             }
         }
         recordingEngineID = nil
-        guard !dictation.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !finalTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             deliveryMessage = dictation.errorMessage ?? "No speech was recognized; nothing was inserted."
             isDeliveringTranscript = false
             synchronizeOverlay(with: dictation)
             return
         }
         let report = await textInsertion.deliver(
-            dictation.transcript,
+            finalTranscript,
             capturedTarget: insertionTargetAtStop,
             copyToClipboard: UserDefaults.standard.bool(forKey: "EchoType.copyToClipboard"),
             autoSend: UserDefaults.standard.bool(forKey: "EchoType.autoSend")
@@ -290,7 +301,7 @@ final class EchoTypeRuntime {
     }
 
     private func synchronizeOverlay(with dictation: SpeechDictationViewModel) {
-        overlayModel.transcript = dictation.transcript
+        overlayModel.transcript = finalTranscriptOverride ?? dictation.transcript
 
         if dictation.isRecording {
             dismissOverlayTask?.cancel()

@@ -4,8 +4,10 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(EchoTypeRuntime.self) private var runtime
+    @AppStorage("EchoType.hasSeenLaunchAtLoginOption") private var hasSeenLaunchAtLoginOption = false
 
     private var history: TranscriptHistoryViewModel { runtime.history }
+    private var launchAtLogin: LaunchAtLoginController { runtime.launchAtLogin }
 
     var body: some View {
         ScrollView {
@@ -18,6 +20,9 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if !hasSeenLaunchAtLoginOption {
+                    launchAtLoginWelcome
+                }
                 SpeechDictationPanel()
                 stats
                 todaySection
@@ -28,6 +33,36 @@ struct HomeView: View {
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .frame(minWidth: 760, minHeight: 580)
+    }
+
+    private var launchAtLoginWelcome: some View {
+        GroupBox("A small startup choice") {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle("Launch EchoType at login", isOn: Binding(
+                    get: { launchAtLogin.isEnabled },
+                    set: { launchAtLogin.setEnabled($0) }
+                ))
+                Text("This is on by default. macOS may ask you to approve EchoType in Login Items; you can change this later in Settings.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let message = launchAtLogin.statusMessage {
+                    HStack {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Open Login Items") { launchAtLogin.openLoginItemsSettings() }
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button("Continue") { hasSeenLaunchAtLoginOption = true }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var stats: some View {

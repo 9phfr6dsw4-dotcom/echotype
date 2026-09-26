@@ -1,4 +1,5 @@
 import AppKit
+import EchoTypeCore
 import Foundation
 import Observation
 
@@ -7,6 +8,7 @@ import Observation
 final class RecordingFeedbackController {
     static let dockIconPreferenceKey = "EchoType.changeDockIconWhileRecording"
     static let soundsPreferenceKey = "EchoType.playRecordingSounds"
+    static let soundVolumePreferenceKey = "EchoType.recordingSoundVolume"
 
     private(set) var isRecording = false
 
@@ -86,6 +88,9 @@ final class RecordingFeedbackController {
     }
 
     private func playSound(named name: String) {
-        NSSound(named: NSSound.Name(name))?.play()
+        guard let sound = NSSound(named: NSSound.Name(name)) else { return }
+        let storedVolume = defaults.object(forKey: Self.soundVolumePreferenceKey) as? Double
+        sound.volume = Float(RecordingSoundVolumePolicy.normalizedLevel(storedValue: storedVolume))
+        sound.play()
     }
 }

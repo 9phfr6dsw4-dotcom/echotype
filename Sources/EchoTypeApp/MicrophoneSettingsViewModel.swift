@@ -183,7 +183,9 @@ private enum AudioInputDeviceCatalog {
             guard hasInputChannels(audioDeviceID),
                   let uid = stringProperty(audioDeviceID, selector: kAudioDevicePropertyDeviceUID),
                   let name = stringProperty(audioDeviceID, selector: kAudioObjectPropertyName) else { return nil }
-            let builtInMac = transportType(audioDeviceID) == kAudioDeviceTransportTypeBuiltIn
+            let transport = transportType(audioDeviceID)
+            guard MicrophoneDeviceVisibilityPolicy.shouldShow(name: name, uid: uid) else { return nil }
+            let builtInMac = transport == kAudioDeviceTransportTypeBuiltIn
                 && name.localizedCaseInsensitiveContains("MacBook")
             let microphone = MicrophoneDevice(
                 id: uid,

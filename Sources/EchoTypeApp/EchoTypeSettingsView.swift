@@ -5,14 +5,20 @@ import UniformTypeIdentifiers
 
 struct EchoTypeSettingsView: View {
     @Environment(EchoTypeRuntime.self) private var runtime
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showingClearConfirmation = false
     @AppStorage("EchoType.showLiveWords") private var showLiveWords = true
     @AppStorage(RecordingFeedbackController.dockIconPreferenceKey) private var changeDockIconWhileRecording = false
     @AppStorage(RecordingFeedbackController.soundsPreferenceKey) private var playRecordingSounds = false
+    @AppStorage(RecordingFeedbackController.soundVolumePreferenceKey) private var recordingSoundVolume = RecordingSoundVolumePolicy.defaultLevel
     @AppStorage(TextInsertionService.correctionLearningPreferenceKey) private var learnRecentInsertionCorrections = false
     @AppStorage("EchoType.transcriptionLanguage") private var transcriptionLanguage = ""
     @State private var newVocabularyTerm = ""
     @State private var vocabularyDrafts: [UUID: String] = [:]
+    @State private var newSmartLinkPhrase = ""
+    @State private var newSmartLinkURL = ""
+    @State private var smartLinkPhraseDrafts: [UUID: String] = [:]
+    @State private var smartLinkURLDrafts: [UUID: String] = [:]
 
     private var history: TranscriptHistoryViewModel { runtime.history }
     private var excludedApps: ExcludedApplicationsViewModel { runtime.excludedApplications }
@@ -21,6 +27,8 @@ struct EchoTypeSettingsView: View {
     private var vocabulary: CustomVocabularyViewModel { runtime.customVocabulary }
     private var modelLibrary: ModelLibraryViewModel { runtime.modelLibrary }
     private var recordingAudioOptions: RecordingAudioOptionsController { runtime.recordingAudioOptions }
+    private var smartLinks: SmartLinksViewModel { runtime.smartLinks }
+    private var launchAtLogin: LaunchAtLoginController { runtime.launchAtLogin }
 
     var body: some View {
         ScrollView {
@@ -33,12 +41,14 @@ struct EchoTypeSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                launchAtLoginSettings
                 historySettings
                 microphoneSettings
                 transcriptionLanguageSettings
                 excludedApplicationsSettings
                 localLearningSettings
                 customVocabularySettings
+                smartLinkSettings
                 recordingBehaviorSettings
                 recordingAudioSettings
 
@@ -71,6 +81,10 @@ struct EchoTypeSettingsView: View {
             runtime.overlayModel.showLiveWords = showLiveWords
             runtime.recordingFeedback.setDockIconChangeEnabled(changeDockIconWhileRecording)
             runtime.textInsertion.setCorrectionLearningEnabled(learnRecentInsertionCorrections)
+            launchAtLogin.refreshStatus()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active { launchAtLogin.refreshStatus() }
         }
         .onChange(of: showLiveWords) { _, enabled in
             runtime.overlayModel.showLiveWords = enabled
@@ -82,6 +96,35 @@ struct EchoTypeSettingsView: View {
             runtime.textInsertion.setCorrectionLearningEnabled(enabled)
         }
         .frame(minWidth: 760, minHeight: 580)
+    }
+
+    private var launchAtLoginSettings: some View {
+        GroupBox("Startup") {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Launch EchoType at login", isOn: Binding(
+                    get: { launchAtLogin.isEnabled },
+                    set: { launchAtLogin.setEnabled($0) }
+                ))
+                Text("On by default for a new installation. macOS may ask you to approve EchoType in System Settings → General → Login Items & Extensions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let message = launchAtLogin.statusMessage {
+                    HStack(alignment: .firstTextBaseline) {
+                        Label(message, systemImage: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button("Open Login Items") {
+                            launchAtLogin.openLoginItemsSettings()
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
     }
 
     private var historySettings: some View {
@@ -358,12 +401,75 @@ struct EchoTypeSettingsView: View {
         }
     }
 
+    private var smartLinkSettings: some View {
+        GroupBox("Smart links") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Save a phrase and its link. When you say the phrase, EchoType replaces it with the URL in the final transcript before saving and pasting. Matching is case-insensitive and only replaces the complete phrase. This works locally with every speech engine.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(spacing: 8) {
+                    TextField("Spoken phrase, for example my GitHub", text: $newSmartLinkPhrase)
+                        .textFieldStyle(.roundedBorder)
+                    TextField("Destination URL (https://…)", text: $newSmartLinkURL)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(addSmartLink)
+                    HStack {
+                        Spacer()
+                        Button("Add Smart Link", action: addSmartLink)
+                            .disabled(!smartLinks.canMutate || newSmartLinkPhrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || newSmartLinkURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                .disabled(!smartLinks.canMutate)
+
+                if smartLinks.store.links.isEmpty {
+                    Text("No smart links saved yet.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(smartLinks.store.links) { link in
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("Spoken phrase", text: smartLinkPhraseBinding(for: link))
+                                .textFieldStyle(.roundedBorder)
+                            TextField("Destination URL", text: smartLinkURLBinding(for: link))
+                                .textFieldStyle(.roundedBorder)
+                            HStack {
+                                Spacer()
+                                Button("Save") { saveSmartLink(link) }
+                                    .disabled(!smartLinks.canMutate)
+                                Button("Remove", role: .destructive) { removeSmartLink(link) }
+                                    .disabled(!smartLinks.canMutate)
+                            }
+                        }
+                    }
+                }
+
+                if let errorMessage = smartLinks.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .textSelection(.enabled)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+        }
+    }
+
     private var recordingBehaviorSettings: some View {
         GroupBox("Recording behavior") {
             VStack(alignment: .leading, spacing: 10) {
                 Toggle("Show live words in the recording overlay", isOn: $showLiveWords)
                 Toggle("Change the Dock icon while recording", isOn: $changeDockIconWhileRecording)
                 Toggle("Play optional recording start/stop sounds", isOn: $playRecordingSounds)
+                HStack {
+                    Text("Sound volume \(Int((recordingSoundVolume * 100).rounded()))%")
+                        .frame(width: 125, alignment: .leading)
+                    Slider(value: $recordingSoundVolume, in: 0...1, step: 0.05)
+                        .accessibilityLabel("Recording sound volume")
+                        .disabled(!playRecordingSounds)
+                }
                 Toggle("Keep microphone on between recordings (instant-on)", isOn: .constant(false))
                     .disabled(true)
                     .accessibilityHint("Unavailable in this build; EchoType never leaves the microphone active between recordings.")
@@ -522,6 +628,56 @@ struct EchoTypeSettingsView: View {
         do {
             _ = try vocabulary.removeTerm(id: term.id)
             vocabularyDrafts.removeValue(forKey: term.id)
+        } catch {
+            // The view model exposes a local, user-readable error message.
+        }
+    }
+
+    private func addSmartLink() {
+        do {
+            _ = try smartLinks.add(phrase: newSmartLinkPhrase, destinationURL: newSmartLinkURL)
+            newSmartLinkPhrase = ""
+            newSmartLinkURL = ""
+        } catch {
+            // The view model exposes a local, user-readable error message.
+        }
+    }
+
+    private func smartLinkPhraseBinding(for link: SmartLink) -> Binding<String> {
+        Binding(
+            get: { smartLinkPhraseDrafts[link.id] ?? link.phrase },
+            set: { smartLinkPhraseDrafts[link.id] = $0 }
+        )
+    }
+
+    private func smartLinkURLBinding(for link: SmartLink) -> Binding<String> {
+        Binding(
+            get: { smartLinkURLDrafts[link.id] ?? link.destinationURL },
+            set: { smartLinkURLDrafts[link.id] = $0 }
+        )
+    }
+
+    private func saveSmartLink(_ link: SmartLink) {
+        let values = SmartLinkEditPolicy.values(
+            existingPhrase: link.phrase,
+            existingDestinationURL: link.destinationURL,
+            phraseDraft: smartLinkPhraseDrafts[link.id],
+            destinationURLDraft: smartLinkURLDrafts[link.id]
+        )
+        do {
+            _ = try smartLinks.edit(id: link.id, phrase: values.phrase, destinationURL: values.destinationURL)
+            smartLinkPhraseDrafts.removeValue(forKey: link.id)
+            smartLinkURLDrafts.removeValue(forKey: link.id)
+        } catch {
+            // The view model exposes a local, user-readable error message.
+        }
+    }
+
+    private func removeSmartLink(_ link: SmartLink) {
+        do {
+            _ = try smartLinks.remove(id: link.id)
+            smartLinkPhraseDrafts.removeValue(forKey: link.id)
+            smartLinkURLDrafts.removeValue(forKey: link.id)
         } catch {
             // The view model exposes a local, user-readable error message.
         }
