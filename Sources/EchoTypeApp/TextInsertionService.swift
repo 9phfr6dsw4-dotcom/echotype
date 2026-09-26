@@ -98,6 +98,8 @@ final class TextInsertionService {
 
     private let defaults: UserDefaults
     private var correctionSession: CorrectionObservationSession?
+    /// Result of the last AXManualAccessibility request per process, shown in delivery diagnostics.
+    private var manualAccessibilityResults: [pid_t: AXError] = [:]
     private var correctionObserver: AXObserver?
     private var correctionRunLoopSource: CFRunLoopSource?
     private var correctionObserverRetain: Unmanaged<TextInsertionService>?
@@ -201,16 +203,43 @@ final class TextInsertionService {
         guard AXIsProcessTrusted(),
               let application = NSWorkspace.shared.frontmostApplication,
               !isExcludedOrUnverifiable(application.bundleIdentifier) else { return }
-        Self.enableManualAccessibility(for: application.processIdentifier)
+        enableManualAccessibility(for: application.processIdentifier)
     }
 
-    private static func enableManualAccessibility(for processIdentifier: pid_t) {
+    private func enableManualAccessibility(for processIdentifier: pid_t) {
         let applicationElement = AXUIElementCreateApplication(processIdentifier)
-        _ = AXUIElementSetAttributeValue(
+        let result = AXUIElementSetAttributeValue(
             applicationElement,
             "AXManualAccessibility" as CFString,
             kCFBooleanTrue
         )
+        manualAccessibilityResults[processIdentifier] = result
+    }
+
+    /// Reads the field's length and caret so an Accessibility insertion can be verified.
+    private func accessibilityEditState(of element: AXUIElement) -> AccessibilityEditState {
+        AccessibilityEditState(
+            characterCount: accessibilityCharacterCount(of: element),
+            selectedRange: accessibilityRange(kAXSelectedTextRangeAttribute, of: element)
+        )
+    }
+
+    /// Waits briefly for the field to reflect an Accessibility insertion. Fields that expose
+    /// neither length nor caret cannot be checked, so their reported success is kept.
+    private func accessibilityInsertionTookEffect(
+        in element: AXUIElement,
+        before: AccessibilityEditState
+    ) async -> Bool {
+        for attempt in 0..<10 {
+            if attempt > 0 { try? await Task.sleep(for: .milliseconds(50)) }
+            switch AccessibilityInsertionVerification.check(before: before, after: accessibilityEditState(of: element)) {
+            case .changed, .unverifiable:
+                return true
+            case .unchanged:
+                continue
+            }
+        }
+        return false
     }
 
     func isFrontmostAppExcluded() -> Bool {
@@ -305,13 +334,29 @@ final class TextInsertionService {
             : nil
 
         var insertedByAccessibility = false
+        var accessibilityInsertionNote: String?
         if finalDecision == .insert,
            let accessibilityTarget = targetAtInsertion.accessibilityTarget {
-            insertedByAccessibility = AXUIElementSetAttributeValue(
-                accessibilityTarget.focusedElement,
+            let element = accessibilityTarget.focusedElement
+            let stateBeforeInsertion = accessibilityEditState(of: element)
+            let setResult = AXUIElementSetAttributeValue(
+                element,
                 kAXSelectedTextAttribute as CFString,
                 cleanText as CFString
-            ) == .success
+            )
+            if setResult == .success {
+                // Chromium and Electron fields can report success without changing; only count
+                // the insertion once the field's length or caret actually moves.
+                insertedByAccessibility = await accessibilityInsertionTookEffect(
+                    in: element,
+                    before: stateBeforeInsertion
+                )
+                if !insertedByAccessibility {
+                    accessibilityInsertionNote = "Accessibility accepted the text but the field did not change, so Unicode keyboard input was used instead."
+                }
+            } else {
+                accessibilityInsertionNote = "Accessibility could not set the selected text (AXError \(setResult.rawValue)), so Unicode keyboard input was used instead."
+            }
         }
 
         if !insertedByAccessibility {
@@ -398,7 +443,9 @@ final class TextInsertionService {
             .inserted
         }
         let insertionResult = usedKeyboardFallback
-            ? "Unicode keyboard input was sent to the same foreground application; app acceptance cannot be confirmed."
+            ? [accessibilityInsertionNote, "Unicode keyboard input was sent to the same foreground application; app acceptance cannot be confirmed."]
+                .compactMap { $0 }
+                .joined(separator: " ")
             : "Accessibility inserted text into the verified field."
         return DeliveryReport(
             outcome: outcome,
@@ -429,7 +476,13 @@ final class TextInsertionService {
         let stoppedApp = captured?.snapshot.applicationName ?? "Unknown"
         let readyApp = current?.snapshot.applicationName ?? "Unknown"
         let stoppedFocusType = captured?.focusedElementType ?? "Unavailable (no frontmost application)"
-        let readyFocusType = current?.focusedElementType ?? "Unavailable (no frontmost application)"
+        var readyFocusType = current?.focusedElementType ?? "Unavailable (no frontmost application)"
+        if let processIdentifier = current?.snapshot.processIdentifier,
+           let result = manualAccessibilityResults[processIdentifier] {
+            readyFocusType += result == .success
+                ? " (app accessibility enabled)"
+                : " (app did not accept AXManualAccessibility, AXError \(result.rawValue))"
+        }
         return TextInsertionDiagnostic(
             appAtDictationStop: stoppedApp,
             appWhenTextWasReady: readyApp,
@@ -788,7 +841,7 @@ final class TextInsertionService {
             // Electron apps expose nothing system-wide until their accessibility tree is enabled;
             // enable it (never for excluded apps) and ask the frontmost application directly.
             guard !isExcludedOrUnverifiable(application.bundleIdentifier) else { return nil }
-            Self.enableManualAccessibility(for: application.processIdentifier)
+            enableManualAccessibility(for: application.processIdentifier)
             focusedValue = nil
             let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
             guard AXUIElementCopyAttributeValue(
