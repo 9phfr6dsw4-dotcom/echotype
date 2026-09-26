@@ -41,7 +41,7 @@ struct ModelLibraryView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(32)
-            .frame(maxWidth: 900, alignment: .leading)
+            // Fill the window at any size, including full screen.
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(Color(nsColor: .windowBackgroundColor))
@@ -98,6 +98,21 @@ struct ModelLibraryView: View {
                         )
                         .font(.subheadline)
                         .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                        if engine.id == ModelLibraryViewModel.whisperEngineID {
+                            switch library.whisperPreparation {
+                            case .preparing:
+                                Label("Preparing for first use… This one-time step can take a few minutes after a new install.", systemImage: "hourglass")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            case .failed(let message):
+                                Label("Whisper could not be prepared: \(message)", systemImage: "exclamationmark.triangle")
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                                    .textSelection(.enabled)
+                            case .idle, .ready:
+                                EmptyView()
+                            }
+                        }
                     }
                     Spacer()
                     if selected {

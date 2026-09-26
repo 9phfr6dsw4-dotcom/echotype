@@ -138,33 +138,7 @@ struct LocalModelTranscriber {
         vocabularyTerms: [String]
     ) async throws -> String {
         try await whisperCache.withModel(at: modelDirectory, load: { directory in
-            let tokenizerURL = directory.appendingPathComponent("tokenizer.json")
-            guard FileManager.default.fileExists(atPath: tokenizerURL.path) else {
-                throw TranscriptionError.missingLocalAsset(tokenizerURL.lastPathComponent)
-            }
-            let offlineHub = HubApiWrapper(
-                downloadBase: directory,
-                endpoint: "file:///EchoFlow-offline-hub"
-            )
-            let tokenizer = try await AutoTokenizerWrapper.from(
-                modelFolder: directory,
-                hubApi: offlineHub
-            )
-            guard tokenizer.convertTokenToId("<|endoftext|>") != nil else {
-                throw TranscriptionError.missingLocalAsset("tokenizer.json (Whisper special tokens)")
-            }
-            let config = WhisperKitConfig(
-                modelFolder: directory.path,
-                tokenizerFolder: directory,
-                verbose: false,
-                prewarm: true,
-                load: true,
-                download: false,
-                useBackgroundDownloadSession: false
-            )
-            return try await CachedWhisperSession(
-                whisper: WhisperKit(config), tokenizer: tokenizer
-            )
+            try await loadWhisperSession(from: directory)
         }, operation: { session in
             let promptText = TranscriptionVocabulary.whisperPromptText(from: vocabularyTerms)
             let promptTokens = promptText.isEmpty ? nil : session.tokenizer.encode(text: promptText)
@@ -179,6 +153,46 @@ struct LocalModelTranscriber {
             )
             return try nonempty(results.map(\.text).joined(separator: " "))
         })
+    }
+
+    /// Loads Whisper into the shared cache before the first dictation. On a fresh install Core ML
+    /// prepares the large model for this Mac the first time it loads, which can take several
+    /// minutes; doing it here keeps that wait out of a dictation. Later calls return immediately
+    /// while the loaded model is still cached.
+    static func prepareWhisper(modelDirectory: URL) async throws {
+        try await whisperCache.withModel(at: modelDirectory, load: { directory in
+            try await loadWhisperSession(from: directory)
+        }, operation: { _ in })
+    }
+
+    private static func loadWhisperSession(from directory: URL) async throws -> CachedWhisperSession {
+        let tokenizerURL = directory.appendingPathComponent("tokenizer.json")
+        guard FileManager.default.fileExists(atPath: tokenizerURL.path) else {
+            throw TranscriptionError.missingLocalAsset(tokenizerURL.lastPathComponent)
+        }
+        let offlineHub = HubApiWrapper(
+            downloadBase: directory,
+            endpoint: "file:///EchoFlow-offline-hub"
+        )
+        let tokenizer = try await AutoTokenizerWrapper.from(
+            modelFolder: directory,
+            hubApi: offlineHub
+        )
+        guard tokenizer.convertTokenToId("<|endoftext|>") != nil else {
+            throw TranscriptionError.missingLocalAsset("tokenizer.json (Whisper special tokens)")
+        }
+        let config = WhisperKitConfig(
+            modelFolder: directory.path,
+            tokenizerFolder: directory,
+            verbose: false,
+            prewarm: true,
+            load: true,
+            download: false,
+            useBackgroundDownloadSession: false
+        )
+        return try await CachedWhisperSession(
+            whisper: WhisperKit(config), tokenizer: tokenizer
+        )
     }
 
     private static func normalizedLanguageCode(_ identifier: String?) -> String? {

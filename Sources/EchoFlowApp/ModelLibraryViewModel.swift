@@ -11,7 +11,19 @@ final class ModelLibraryViewModel {
     private(set) var installedDownloadIDs: Set<String> = []
     private(set) var activeDownloadIDs: Set<String> = []
     private(set) var progressByDownloadID: [String: ModelInstallProgress] = [:]
+    private(set) var whisperPreparation: WhisperPreparation = .idle
     var errorMessage: String?
+
+    /// Whisper is loaded (and, on a fresh install, prepared by Core ML) ahead of the first dictation.
+    enum WhisperPreparation: Equatable {
+        case idle
+        case preparing
+        case ready
+        case failed(String)
+    }
+
+    static let whisperEngineID = "whisper-large-v3-turbo"
+    @ObservationIgnored private var whisperPreparationTask: Task<Void, Never>?
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let installer: ModelArtifactInstaller
@@ -44,6 +56,27 @@ final class ModelLibraryViewModel {
             self.selectedEngineID = selection.engineID
         } catch {
             self.startupError = error.localizedDescription
+        }
+        prepareWhisperIfSelected()
+    }
+
+    /// Starts preparing Whisper in the background when it is the selected, installed engine.
+    func prepareWhisperIfSelected() {
+        guard selectedEngineID == Self.whisperEngineID,
+              whisperPreparation == .idle || whisperPreparation.isFailed,
+              let directory = installedModelDirectory(for: Self.whisperEngineID) else { return }
+        whisperPreparation = .preparing
+        whisperPreparationTask = Task { [weak self] in
+            let result: WhisperPreparation
+            do {
+                try await LocalModelTranscriber.prepareWhisper(modelDirectory: directory)
+                result = .ready
+            } catch {
+                result = .failed(error.localizedDescription)
+            }
+            // Deleting Whisper while it prepares resets the state; keep that reset.
+            guard let self, self.whisperPreparation == .preparing else { return }
+            self.whisperPreparation = result
         }
     }
 
@@ -111,6 +144,7 @@ final class ModelLibraryViewModel {
         selectedEngineID = selection.engineID
         defaults.set(selection.engineID, forKey: Self.selectedEngineDefaultsKey)
         errorMessage = nil
+        prepareWhisperIfSelected()
     }
 
     func download(engineID: String) async {
@@ -145,6 +179,7 @@ final class ModelLibraryViewModel {
             }
             installedDownloadIDs.insert(downloadID)
             refreshSelection()
+            prepareWhisperIfSelected()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -171,6 +206,11 @@ final class ModelLibraryViewModel {
         }
         if try installer(for: download).removeInstalled(download) {
             installedDownloadIDs.remove(download.id)
+            if download.engineId == Self.whisperEngineID {
+                whisperPreparationTask?.cancel()
+                whisperPreparationTask = nil
+                whisperPreparation = .idle
+            }
         }
     }
 
@@ -207,5 +247,12 @@ final class ModelLibraryViewModel {
         )
         selection = updated
         selectedEngineID = updated.engineID
+    }
+}
+
+extension ModelLibraryViewModel.WhisperPreparation {
+    var isFailed: Bool {
+        if case .failed = self { return true }
+        return false
     }
 }

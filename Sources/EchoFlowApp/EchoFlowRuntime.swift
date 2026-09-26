@@ -474,6 +474,10 @@ final class EchoFlowRuntime {
         }
         isDeliveringTranscript = true
         overlayModel.phase = .finishing
+        if recordingEngineID == ModelLibraryViewModel.whisperEngineID,
+           modelLibrary.whisperPreparation != .ready {
+            overlayModel.deliveryMessage = "Preparing Whisper for first use. This one-time step can take a few minutes after a new install."
+        }
         overlayWindow.show()
         recordingAudioOptions.stopRecording()
         recordingFeedback.recordingStopped()
@@ -565,6 +569,7 @@ final class EchoFlowRuntime {
         recordingEngineID = nil
         guard !finalTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             deliveryMessage = dictation.errorMessage ?? "No speech was recognized; nothing was inserted."
+            overlayModel.deliveryMessage = deliveryMessage
             isDeliveringTranscript = false
             synchronizeOverlay(with: dictation)
             return
