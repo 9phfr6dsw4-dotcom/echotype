@@ -138,6 +138,16 @@ public struct TextInsertionPolicy: Sendable {
             return .keyboardEventFallback
         }
 
+        let safariComboBox = role == "AXComboBox"
+            && current.bundleIdentifier?.caseInsensitiveCompare("com.apple.Safari") == .orderedSame
+        if safariComboBox, current.focusedElementIsEditable != true {
+            // Safari may expose editable webpage controls such as Google's central search box
+            // as a combo box without a usable AXIsEditable value. Use keyboard events only while
+            // the exact focused element is unchanged; secure fields were rejected above.
+            guard sameFocusedElement else { return .blocked(.unsupportedField) }
+            return .keyboardEventFallback
+        }
+
         let editableComboBox = role == "AXComboBox" && current.focusedElementIsEditable == true
         guard textInputRoles.contains(role) || editableComboBox else {
             return .blocked(.unsupportedField)
