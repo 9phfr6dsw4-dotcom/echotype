@@ -76,10 +76,10 @@ final class TextInsertionPolicyTests: XCTestCase {
         }
     }
 
-    func testSplitGroupUsesKeyboardFallbackOnlyWhileSameElementStaysFocused() {
+    func testMicrosoftWordSplitGroupUsesKeyboardFallbackOnlyWhileSameElementStaysFocused() {
         let target = TextInsertionSnapshot(
             processIdentifier: 42,
-            bundleIdentifier: "com.apple.Safari",
+            bundleIdentifier: "com.microsoft.Word",
             focusedRole: "AXSplitGroup"
         )
 
@@ -89,6 +89,16 @@ final class TextInsertionPolicyTests: XCTestCase {
         )
         XCTAssertEqual(
             policy.decision(captured: target, current: target, sameFocusedElement: false),
+            .blocked(.unsupportedField)
+        )
+
+        let otherApp = TextInsertionSnapshot(
+            processIdentifier: 84,
+            bundleIdentifier: "com.apple.Safari",
+            focusedRole: "AXSplitGroup"
+        )
+        XCTAssertEqual(
+            policy.decision(captured: otherApp, current: otherApp, sameFocusedElement: true),
             .blocked(.unsupportedField)
         )
     }

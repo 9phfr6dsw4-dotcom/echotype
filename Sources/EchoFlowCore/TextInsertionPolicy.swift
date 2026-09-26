@@ -123,7 +123,23 @@ public struct TextInsertionPolicy: Sendable {
         guard !isSecureField(captured), !isSecureField(current) else {
             return .blocked(.secureField)
         }
-        guard let role = current.focusedRole, textInputRoles.contains(role) else {
+        guard let role = current.focusedRole else {
+            return .blocked(.unsupportedField)
+        }
+
+        if role == "AXSplitGroup" {
+            // Microsoft Word can report its focused document canvas as a split group.
+            // This generic role is accepted only for Word and only while the exact focused
+            // element remains stable; bypass AX text-setting and use the existing keyboard path.
+            guard sameFocusedElement,
+                  current.bundleIdentifier?.caseInsensitiveCompare("com.microsoft.Word") == .orderedSame else {
+                return .blocked(.unsupportedField)
+            }
+            return .keyboardEventFallback
+        }
+
+        let editableComboBox = role == "AXComboBox" && current.focusedElementIsEditable == true
+        guard textInputRoles.contains(role) || editableComboBox else {
             return .blocked(.unsupportedField)
         }
         return sameFocusedElement ? .insert : .keyboardEventFallback
