@@ -6,19 +6,22 @@ public struct TextInsertionSnapshot: Equatable, Sendable {
     public let applicationName: String?
     public let focusedRole: String?
     public let focusedSubrole: String?
+    public let focusedElementIsEditable: Bool?
 
     public init(
         processIdentifier: Int32,
         bundleIdentifier: String?,
         focusedRole: String?,
         focusedSubrole: String? = nil,
-        applicationName: String? = nil
+        applicationName: String? = nil,
+        focusedElementIsEditable: Bool? = nil
     ) {
         self.processIdentifier = processIdentifier
         self.bundleIdentifier = bundleIdentifier
         self.applicationName = applicationName
         self.focusedRole = focusedRole
         self.focusedSubrole = focusedSubrole
+        self.focusedElementIsEditable = focusedElementIsEditable
     }
 }
 

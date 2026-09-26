@@ -46,6 +46,53 @@ final class TextInsertionPolicyTests: XCTestCase {
         )
     }
 
+    func testEditableComboBoxUsesAccessibilityInsertion() {
+        let target = TextInsertionSnapshot(
+            processIdentifier: 42,
+            bundleIdentifier: "com.apple.Safari",
+            focusedRole: "AXComboBox",
+            focusedElementIsEditable: true
+        )
+
+        XCTAssertEqual(
+            policy.decision(captured: target, current: target, sameFocusedElement: true),
+            .insert
+        )
+    }
+
+    func testNonEditableComboBoxRemainsBlocked() {
+        for isEditable in [false, nil] {
+            let target = TextInsertionSnapshot(
+                processIdentifier: 42,
+                bundleIdentifier: "com.apple.Safari",
+                focusedRole: "AXComboBox",
+                focusedElementIsEditable: isEditable
+            )
+
+            XCTAssertEqual(
+                policy.decision(captured: target, current: target, sameFocusedElement: true),
+                .blocked(.unsupportedField)
+            )
+        }
+    }
+
+    func testSplitGroupUsesKeyboardFallbackOnlyWhileSameElementStaysFocused() {
+        let target = TextInsertionSnapshot(
+            processIdentifier: 42,
+            bundleIdentifier: "com.apple.Safari",
+            focusedRole: "AXSplitGroup"
+        )
+
+        XCTAssertEqual(
+            policy.decision(captured: target, current: target, sameFocusedElement: true),
+            .keyboardEventFallback
+        )
+        XCTAssertEqual(
+            policy.decision(captured: target, current: target, sameFocusedElement: false),
+            .blocked(.unsupportedField)
+        )
+    }
+
     func testSecureTextFieldIsNeverEligible() {
         let target = TextInsertionSnapshot(
             processIdentifier: 42,
