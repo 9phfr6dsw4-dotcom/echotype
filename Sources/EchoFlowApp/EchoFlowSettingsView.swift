@@ -61,7 +61,7 @@ struct EchoFlowSettingsView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(28)
-            .frame(maxWidth: 900, alignment: .leading)
+            // Fill the window at any size, including full screen.
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(Color(nsColor: .windowBackgroundColor))

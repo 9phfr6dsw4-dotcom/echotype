@@ -28,7 +28,7 @@ struct HomeView: View {
                 todaySection
             }
             .padding(28)
-            .frame(maxWidth: 1000, alignment: .leading)
+            // Fill the window at any size, including full screen.
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(Color(nsColor: .windowBackgroundColor))
