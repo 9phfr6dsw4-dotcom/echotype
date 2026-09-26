@@ -130,6 +130,7 @@ public enum TranscriptTextCleanupPolicy {
     private static let fillerPattern = #"(?i)(?<![\p{L}\p{N}_])(?:um+|uh+)(?![\p{L}\p{N}_])[,;:]?"#
     private static let parentheticalLikePattern = #"(?i),[ \t]*like,[ \t]*"#
     private static let leadingLikePattern = #"(?i)^\s*like,[ \t]*"#
+    private static let repeatedLikePattern = #"(?i)(?<![\p{L}\p{N}_])([\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)?),[ \t]*like,[ \t]*\1(?![\p{L}\p{N}_])"#
     private static let repeatedPhrasePattern = #"(?i)(?<![\p{L}\p{N}_])((?:[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)?[ \t]+){0,5}[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)?)(?:[,;:—–-])[ \t]*\1(?![\p{L}\p{N}_])"#
     private static let repeatedWordPattern = #"(?i)(?<![\p{L}\p{N}_])([\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)?)[ \t]+\1(?![\p{L}\p{N}_])"#
     private static let numberWordPattern = #"(?i)[\p{L}]+"#
@@ -194,7 +195,8 @@ public enum TranscriptTextCleanupPolicy {
     }
 
     private static func removingFillers(from text: String) -> String {
-        var result = replacing(parentheticalLikePattern, in: text, with: " ")
+        var result = replacing(repeatedLikePattern, in: text, with: "$1, $1")
+        result = replacing(parentheticalLikePattern, in: result, with: " ")
         result = replacing(leadingLikePattern, in: result, with: "")
         result = replacing(fillerPattern, in: result, with: "")
         result = replacing(#"[ \t]+([,.;!?])"#, in: result, with: "$1")
