@@ -60,7 +60,7 @@ final class TextInsertionPolicyTests: XCTestCase {
         )
     }
 
-    func testNonEditableComboBoxRemainsBlocked() {
+    func testSafariComboBoxUsesKeyboardFallbackWhenEditabilityIsFalseOrUnavailable() {
         for isEditable in [false, nil] {
             let target = TextInsertionSnapshot(
                 processIdentifier: 42,
@@ -71,9 +71,27 @@ final class TextInsertionPolicyTests: XCTestCase {
 
             XCTAssertEqual(
                 policy.decision(captured: target, current: target, sameFocusedElement: true),
+                .keyboardEventFallback
+            )
+            XCTAssertEqual(
+                policy.decision(captured: target, current: target, sameFocusedElement: false),
                 .blocked(.unsupportedField)
             )
         }
+    }
+
+    func testNonEditableComboBoxOutsideSafariRemainsBlocked() {
+        let target = TextInsertionSnapshot(
+            processIdentifier: 42,
+            bundleIdentifier: "com.example.editor",
+            focusedRole: "AXComboBox",
+            focusedElementIsEditable: false
+        )
+
+        XCTAssertEqual(
+            policy.decision(captured: target, current: target, sameFocusedElement: true),
+            .blocked(.unsupportedField)
+        )
     }
 
     func testMicrosoftWordSplitGroupUsesKeyboardFallbackOnlyWhileSameElementStaysFocused() {
