@@ -19,7 +19,7 @@ final class CustomVocabularyStoreTests: XCTestCase {
         let edited = try store.addTerm("Echo Flow")
         _ = try store.addTerm("Acme Labs")
 
-        let result = try store.editTerm(id: edited.id, to: "  Echo   Type Pro ")
+        let result = try store.editTerm(id: edited.id, to: "  Echo   Flow Pro ")
 
         XCTAssertEqual(result.id, edited.id)
         XCTAssertEqual(result.term, "Echo Flow Pro")

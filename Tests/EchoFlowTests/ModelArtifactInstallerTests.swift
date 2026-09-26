@@ -4,7 +4,7 @@ import XCTest
 
 final class ModelArtifactInstallerTests: XCTestCase {
     private let fixture = Data("EchoFlow installer fixture v1\n".utf8)
-    private let fixtureSHA256 = "18b6c1b0168a1e55506e188373accf8f5d6b38156817350ad788bdae12288ac5"
+    private let fixtureSHA256 = "411eba8c6cb45e1e55b47625aa32517f2971137c0f68d960430eb0f1b24baf28"
 
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
