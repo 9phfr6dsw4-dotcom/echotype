@@ -59,17 +59,16 @@ jobs:
           ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$APP/Contents/Info.plist")"
           [[ "$ICON_NAME" == *.icns ]] || ICON_NAME="$ICON_NAME.icns"
           sips -s format png "$APP/Contents/Resources/$ICON_NAME" --out "$RUNNER_TEMP/readme-images/echotype-icon.png" >/dev/null
-          osascript <<'APPLESCRIPT'
-          tell application "System Events"
-            tell process "EchoType"
-              set frontmost to true
-              repeat 4 times
-                key code 121
-                delay 0.4
-              end repeat
-            end tell
-          end tell
-          APPLESCRIPT
+          cat > "$RUNNER_TEMP/scroll.swift" <<'SWIFT'
+          import CoreGraphics
+          import Foundation
+          let source = CGEventSource(stateID: .combinedSessionState)
+          for _ in 0..<10 {
+            let event = CGEvent(scrollWheelEvent2Source: source, units: .line, wheelCount: 1, wheel1: -5, wheel2: 0, wheel3: 0)!
+            event.location = CGPoint(x: 520, y: 420)
+            event.post(tap: .cghidEventTap)
+            Thread.sleep(forTimeInterval: 0.15)
+          }
           sleep 2
           WINDOW_ID="$(swift "$RUNNER_TEMP/capture.swift" EchoType)"
           screencapture -x -l "$WINDOW_ID" "$RUNNER_TEMP/readme-images/echotype-window.png"
